@@ -92,12 +92,12 @@ class Catamaran(unittest.TestCase):
 
 class Dxf(unittest.TestCase):
     def test_us_inches(self):
-        txt = "\n".join(str(x) for x in [0, "SECTION", 2, "ENTITIES",
-                                         0, "LINE", 8, "T0.25", 10, 0, 20, 0, 11, 40, 21, 0, 0, "ENDSEC"]) + "\n"
+        ent = [0, "LWPOLYLINE", 8, "X", 90, 4, 70, 1, 10, 0, 20, 0, 10, 40, 20, 0, 10, 40, 20, 0.25, 10, 0, 20, 0.25]
+        txt = "\n".join(str(x) for x in [0, "SECTION", 2, "ENTITIES", *ent, 0, "ENDSEC"]) + "\n"
         d = dxf.parse(txt, units="US")
         self.assertEqual(d["unit"], "in")
-        self.assertAlmostEqual(d["segments"][0][3] - d["segments"][0][1], 40.0)
-        self.assertAlmostEqual(dxf.guess_thickness("T0.25", "US") or 0.25, 0.25)
+        self.assertAlmostEqual(max(q[0] for q in d["loops"][0][1]), 40.0)
+        self.assertAlmostEqual(d["layers"]["X"]["area_mm2"], 10.0)  # in2 under the legacy key
 
     def test_section_us(self):
         mem = [{"name": "top", "y1": -20, "z1": 24, "y2": 20, "z2": 24, "t_mm": 0.25},
@@ -107,6 +107,17 @@ class Dxf(unittest.TestCase):
         r = SC.compute({"members": mem}, "US")
         self.assertAlmostEqual(r["A_cm2"], (2 * 40 + 2 * 24) * 0.25)  # in2 under the legacy key
         self.assertEqual(r["units"], "US")
+
+    def test_outline_section_converts_and_agrees(self):
+        loops = [["A", [[0, 0], [1000, 0], [1000, 10], [0, 10]]], ["B", [[0, 500], [1000, 500], [1000, 510], [0, 510]]]]
+        si = {"section": {"dxf": {"layers": {"A": {"n": 1, "n_open": 0, "area_mm2": 10000.0}, "B": {}}, "loops": loops}}}
+        usec = UN.convert_inputs(si, "US")["section"]
+        us = usec["dxf"]
+        self.assertAlmostEqual(us["loops"][0][1][1][0], 1000 / 25.4, places=4)
+        self.assertAlmostEqual(us["layers"]["A"]["area_mm2"], 10000 / 25.4 ** 2, places=3)
+        a = SC.compute(si["section"], "SI")
+        b = SC.compute(usec, "US")
+        self.assertAlmostEqual(b["I_cm4"] * 25.4 ** 4 / 1e4, a["I_cm4"], delta=a["I_cm4"] * 1e-4)  # in4 -> cm4
 
 
 if __name__ == "__main__":

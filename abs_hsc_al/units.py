@@ -309,9 +309,15 @@ def _section(sec: dict, f, n) -> dict:
             for k in ("t_mm", "length_mm"):
                 if k in v:
                     v[k] = _conv(v[k], f["small"], n)
+            if "area_mm2" in v:
+                v["area_mm2"] = _conv(v["area_mm2"], f["area_mm2"], n)
             return v
         d["layers"] = {k: _layer(v) for k, v in d.get("layers", {}).items()}
-        d["segments"] = [[s[0]] + [_conv(x, f["small"], n) for x in s[1:]] for s in d.get("segments", [])]
+        for key in ("segments", "open_segments"):
+            if key in d:
+                d[key] = [[s[0]] + [_conv(x, f["small"], n) for x in s[1:]] for s in d[key]]
+        if "loops" in d:
+            d["loops"] = [[l[0], [[_conv(a, f["small"], n), _conv(b, f["small"], n)] for a, b in l[1]]] for l in d["loops"]]
         if isinstance(d.get("meta"), dict):
             meta = dict(d["meta"])
             if "bbox" in meta:

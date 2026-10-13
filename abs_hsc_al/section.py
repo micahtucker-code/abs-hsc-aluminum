@@ -6,7 +6,9 @@ Members:
   plate    a straight line from (y1,z1) to (y2,z2) with thickness t_mm; may carry a regular set of
            stiffeners (flat bar / tee / angle) expanded into web and flange lines
   lump     a stand-alone area (e.g. an extrusion or bulb taken from a catalogue): area_mm2, z_mm, I_mm4
-  dxf      segments imported from a CAD drawing, thickness and effectiveness set per layer
+  dxf      a CAD drawing of closed shape outlines (plates, stiffeners, extrusions drawn as they are): the section
+           properties come from the enclosed areas, a shape inside another is a hole, effectiveness is set per layer.
+           (Older documents with line `segments` and a thickness per layer are still read.)
 
 Every element may carry an 'effective' factor (0..1) that scales its area and inertia, so non-effective
 structure (superstructure, bulwarks) can be left in the drawing at 0.
@@ -18,6 +20,7 @@ from __future__ import annotations
 
 import math
 
+from . import shapes as SH
 from . import units as UN
 
 
@@ -105,7 +108,16 @@ def compute(sec: dict, units: str = "SI") -> dict:
         else:
             raise ValueError(f"section member '{name}': type must be 'plate' or 'lump'")
     skipped: dict[str, int] = {}
-    if dxf:
+    polys = []  # outline shapes: dict(layer, pts (ccw), sign, k, ...)
+    if dxf and dxf.get("loops"):
+        lay = dxf.get("layers", {})
+        inc = [(l, [tuple(q) for q in pts]) for l, pts in dxf["loops"] if not (lay.get(l) or {}).get("ignore")]
+        if inc:
+            depth = SH.nest_depths([pts for _, pts in inc], 1e-6 * max(1.0, max(abs(v) for _, pts in inc for q in pts for v in q)))
+            for (l, pts), dp in zip(inc, depth):
+                eff = float((lay.get(l) or {}).get("eff", 1.0))
+                polys.append({"layer": l, "pts": SH.ccw(pts), "sign": 1.0 if dp % 2 == 0 else -1.0, "eff": eff, "depth": dp})
+    if dxf and dxf.get("segments"):
         lay = dxf.get("layers", {})
         for s in dxf.get("segments", []):
             L = lay.get(s[0])
@@ -116,11 +128,11 @@ def compute(sec: dict, units: str = "SI") -> dict:
                 continue
             lines.append({"group": "dxf: " + s[0], "y1": s[1], "z1": s[2], "y2": s[3], "z2": s[4],
                           "t": float(L["t_mm"]), "eff": float(L.get("eff", 1.0)), "kind": "plate", "src": None})
-    if not lines and not lumps:
+    if not lines and not lumps and not polys:
         raise ValueError("section has no members")
 
-    ys = [v for l in lines for v in (l["y1"], l["y2"])]
-    zs = [v for l in lines for v in (l["z1"], l["z2"])] + [x["z"] for x in lumps]
+    ys = [v for l in lines for v in (l["y1"], l["y2"])] + [q[0] for pl in polys for q in pl["pts"]]
+    zs = [v for l in lines for v in (l["z1"], l["z2"])] + [x["z"] for x in lumps] + [q[1] for pl in polys for q in pl["pts"]]
     ref = (0.0 if mirror or not ys else (min(ys) + max(ys)) / 2, (min(zs) + max(zs)) / 2)
 
     # --- expand stiffeners ---
@@ -154,13 +166,31 @@ def compute(sec: dict, units: str = "SI") -> dict:
         if mirror and abs(x["y"]) > 1e-6:
             lump_geom.append([round(-x["y"], 2), round(x["z"], 2), x["A"]])
 
+    # --- outline shapes (mirrored where required); each copy is one element ---
+    pcopies = []
+    poly_geom = []
+    ytol = 1e-6 * max(1.0, max((abs(q[0]) for pl in polys for q in pl["pts"]), default=1.0))
+    for pl in polys:
+        yy = [q[0] for q in pl["pts"]]
+        straddle = min(yy) < -ytol and max(yy) > ytol
+        copies = [pl["pts"]]
+        if mirror and not straddle:
+            copies.append(SH.ccw([(-q[0], q[1]) for q in pl["pts"]]))
+        for pts in copies:
+            pr = SH.props(pts)
+            k = pl["sign"] * pl["eff"]
+            elems.append({"group": "dxf: " + pl["layer"], "A": pr["A"] * k, "z": pr["cz"], "I": pr["Izz"] * k})
+            pcopies.append({"pts": pts, "sign": pl["sign"], "k": pl["eff"], "A": pr["A"],
+                            "ytol": ytol})
+            poly_geom.append([pl["layer"], int(pl["sign"]), pl["eff"], [[round(q[0], 3), round(q[1], 3)] for q in pts], pl["depth"]])
+
     A = sum(e["A"] for e in elems)
     if A <= 0:
         raise ValueError("section has no net effective area")
     zna = sum(e["A"] * e["z"] for e in elems) / A
     I = sum(e["I"] + e["A"] * (e["z"] - zna) ** 2 for e in elems)
 
-    zs = zs + [v for l in allx for v in (l["z1"], l["z2"])]
+    zs = zs + [v for l in allx for v in (l["z1"], l["z2"])]  # (shape vertices are already in zs)
     z_bot = float(sec["base_z_mm"]) if "base_z_mm" in sec else min(zs)
     z_deck = float(sec["deck_z_mm"]) if "deck_z_mm" in sec else max(zs)
     if not (z_bot < zna < z_deck):
@@ -179,23 +209,25 @@ def compute(sec: dict, units: str = "SI") -> dict:
         rows.append({"name": g["name"], "A_cm2": g["A_mm2"] / U.area_div, "z_mm": zc,
                      "I_own_cm4": g["I_own"] / U.inertia_div, "I_total_cm4": (g["I_own"] + dist) / U.inertia_div})
     z_lev = float(sec["shear_level_z_mm"]) if "shear_level_z_mm" in sec else zna
-    shear = _shear_geometry(elems, lumps, mirror, z_lev, zna, U)
-    shear["web_area_cm2"] = sum(e["k"] * e["line"]["t"] * abs(e["line"]["z2"] - e["line"]["z1"])
-                                for e in elems if "line" in e and e["line"]["kind"] == "plate"
-                                and abs(e["line"]["z2"] - e["line"]["z1"]) > abs(e["line"]["y2"] - e["line"]["y1"])) / U.area_div
+    shear = _shear_geometry(elems, lumps, mirror, z_lev, zna, U, pcopies)
+    shear["web_area_cm2"] = (sum(e["k"] * e["line"]["t"] * abs(e["line"]["z2"] - e["line"]["z1"])
+                                 for e in elems if "line" in e and e["line"]["kind"] == "plate"
+                                 and abs(e["line"]["z2"] - e["line"]["z1"]) > abs(e["line"]["y2"] - e["line"]["y1"]))
+                             + sum(c["k"] * SH.web_area(c["pts"]) for c in pcopies if c["sign"] > 0)) / U.area_div
     return {
         "shear": shear,
         "units": U.name,
         "A_cm2": A / U.area_div, "z_NA_mm": zna, "I_cm4": I / U.inertia_div,
         "z_deck_mm": z_deck, "z_bottom_mm": z_bot,
         "SM_deck_cm3": I / (z_deck - zna) / U.mod_div, "SM_bottom_cm3": I / (zna - z_bot) / U.mod_div,
-        "mirror": mirror, "rows": rows, "geometry": geom, "lumps": lump_geom,
+        "mirror": mirror, "rows": rows, "geometry": geom, "lumps": lump_geom, "polygons": poly_geom,
+        "n_shapes": sum(1 for pl in polys if pl["sign"] > 0), "n_holes": sum(1 for pl in polys if pl["sign"] < 0),
         "skipped_layers": skipped, "n_lines": len(allx), "n_stiffener_lines": len(allx) - len(lines),
         "bbox": [min(ys + [-y for y in ys] if mirror else ys), min(zs), max(ys + [-y for y in ys] if mirror else ys), max(zs)] if ys else [0, min(zs), 0, max(zs)],
     }
 
 
-def _shear_geometry(elems, lumps, mirror, z_lev, zna, U=UN.SI):
+def _shear_geometry(elems, lumps, mirror, z_lev, zna, U=UN.SI, pcopies=()):
     """First moment m (cm3; in3 for US) about the neutral axis of the effective area above the level z_lev, and the shear
     webs (plate members that cross the level): count, total thickness, thinnest, any on the centreline."""
     m = 0.0
@@ -223,5 +255,17 @@ def _shear_geometry(elems, lumps, mirror, z_lev, zna, U=UN.SI):
     for x in lumps:
         if x["z"] > z_lev:
             m += x["A"] * x["eff"] * (2.0 if (mirror and abs(x["y"]) > 1e-6) else 1.0) * (x["z"] - zna)
+    for c in pcopies:  # outline shapes: first moment of the part above the level; thin steep parts that cross it are webs
+        up = SH.clip_above(c["pts"], z_lev)
+        if up:
+            pr = SH.props(up)
+            m += c["sign"] * c["k"] * pr["A"] * (pr["cz"] - zna)
+        if c["sign"] > 0:
+            for w in SH.web_chords(c["pts"], z_lev):
+                t = w["t"]
+                webs_t += c["k"] * t
+                n_webs += 1
+                t_min = t if t_min is None else min(t_min, t)
+                on_cl_web = on_cl_web or (w["y"][0] <= c["ytol"] and w["y"][1] >= -c["ytol"])
     return {"z_level_mm": z_lev, "m_cm3": m / U.mod_div, "web_t_sum_mm": webs_t, "n_webs": n_webs,
             "t_min_mm": t_min, "centreline_web": on_cl_web}
