@@ -251,8 +251,10 @@ class EndToEnd(unittest.TestCase):
             rep = run(json.load(f))
         self.assertTrue(len(rep["results"]) >= 10)
         by = {(r["id"], r["kind"]): r for r in rep["results"]}
-        p = rep["pressures"]["bottom plate:bottom_slam"]
-        self.assertAlmostEqual(by[("bottom plate", "lateral (bottom_slam)")]["required"],
+        p = rep["pressures"]["bottom plate, MID:bottom_slam"]
+        v = P.Vessel(L=24, Lw=22.5, B=6, Bw=5.2, D=3, d=1.1, delta_t=60, V=30, service="coastal")
+        self.assertAlmostEqual(p, 0.1 * 60000 / (22.5 * 5.2) * (1 + P.ncg(v)) * 0.75 * 1.0)  # L<61 m: (1+ncg) FD Fv, Fv = 1.0
+        self.assertAlmostEqual(by[("bottom plate, MID", "lateral (bottom_slam)")]["required"],
                                400 * math.sqrt(p * PL.k_factor(3) / (1000 * 0.9 * 165)))
 
 
