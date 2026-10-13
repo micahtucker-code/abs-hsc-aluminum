@@ -142,6 +142,55 @@ class Pressures(unittest.TestCase):
         c = Curve([0, 1], [0, 10]); self.assertEqual(c(0.5), 5); self.assertEqual(c(2), 10)
 
 
+class Stations(unittest.TestCase):
+    V24 = P.Vessel(L=24, Lw=22.5, B=6, Bw=5.2, D=3, d=1.1, delta_t=60, V=30, service="coastal")
+
+    def rows(self):
+        return {"rows": [
+            {"name": "AP", "x_over_L": 0.0, "beta_bx": 20, "Fv": 0.5},
+            {"name": "MID", "x_over_L": 0.5, "beta_bx": 15, "Fv": 0.8},
+            {"name": "FWD", "x_over_L": 0.9, "beta_bx": 10, "beta_sx": 40, "Kv": 1.4, "Fv": 1.0}]}
+
+    def test_table_values(self):
+        from abs_hsc_al import stations as ST
+        st = ST.parse(self.rows(), self.V24)
+        tb = ST.table(st, self.V24, FD=0.6)
+        base = 0.1 * 60000 / (22.5 * 5.2)
+        n = P.ncg(self.V24)
+        self.assertAlmostEqual(tb[1]["x_m"], 12.0)
+        self.assertAlmostEqual(tb[1]["pbxx"], base * (1 + n) * 0.6 * 0.8)        # L < 61 m: (1+ncg) FD Fv
+        self.assertAlmostEqual(tb[2]["pss"], base * (1 + n * 1.4) * (70 - 40) / (70 - 15) * 0.6)
+        self.assertIsNone(tb[0]["pss"])                                           # no side deadrise given
+
+    def test_missing_factor_is_reported_not_guessed(self):
+        from abs_hsc_al import stations as ST
+        st = ST.parse({"rows": [{"name": "A", "x_over_L": 0.2}]}, self.V24)
+        r = ST.table(st, self.V24, 0.5)[0]
+        self.assertIsNone(r["pbxx"]); self.assertTrue(r["notes"])
+
+    def test_bad_inputs(self):
+        from abs_hsc_al import stations as ST
+        with self.assertRaises(ValueError):
+            ST.parse({"rows": [{"name": "A", "x_over_L": 1.5}]}, self.V24)
+        with self.assertRaises(ValueError):
+            ST.parse({"rows": [{"name": "A", "x_over_L": .1}, {"name": "A", "x_over_L": .2}]}, self.V24)
+
+    def test_panel_uses_station(self):
+        d = {"vessel": {"L": 24, "Lw": 22.5, "B": 6, "Bw": 5.2, "D": 3, "d": 1.1, "delta_t": 60, "V": 30, "service": "coastal"},
+             "material": {"alloy": "5083-H116", "product": "plate", "thickness_mm": 8},
+             "stations": dict(self.rows(), FD=0.6),
+             "plates": [{"id": "bottom MID", "location": "bottom", "s_mm": 400, "l_mm": 1200, "t_mm": 8,
+                         "loads": {"bottom_slam": {"calc": "bottom_slam_xx", "station": "MID", "FD": 0.6}}}]}
+        rep = run(d)
+        base = 0.1 * 60000 / (22.5 * 5.2)
+        self.assertAlmostEqual(rep["pressures"]["bottom MID:bottom_slam"], base * (1 + P.ncg(self.V24)) * 0.6 * 0.8)
+        self.assertEqual(rep["pressure_log"][0]["factors"]["station"], "MID")
+        self.assertEqual(len(rep["station_table"]["rows"]), 3)
+        d["plates"][0]["loads"]["bottom_slam"]["station"] = "NOPE"
+        with self.assertRaises(ValueError):
+            run(d)
+
+
 class OperatingLimits(unittest.TestCase):
     def test_speed_reduces_with_wave_height_at_constant_ncg(self):
         from abs_hsc_al.report import operating_limits

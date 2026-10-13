@@ -7,13 +7,14 @@ from dataclasses import asdict
 from . import __version__
 from . import pressures as P
 from .figures import Factors
+from . import stations as ST
 from .materials import AluminumMaterial
 from .plating import check_plate, check_plate_buckling, PlateResult
 from .stiffeners import Section, effective_plate_width, check_stiffener
 from .hullgirder import check_hull_girder
 
 
-def resolve_pressure_detail(spec, v: P.Vessel, fac: Factors):
+def resolve_pressure_detail(spec, v: P.Vessel, fac: Factors, stations=None):
     """Returns (p kN/m2, used-factors dict, Rule equation text, clause). spec: number, {"value": p},
     or {"calc": name, ...}. Figure factors may be given directly or via curves ('x_over_L', 'AD_over_AR')."""
     if isinstance(spec, (int, float)):
@@ -22,6 +23,15 @@ def resolve_pressure_detail(spec, v: P.Vessel, fac: Factors):
         return float(spec["value"]), {}, "p entered directly", "-"
     c, x = spec["calc"], spec.get("x_over_L")
     used = {}
+    if spec.get("station"):  # panel is tied to a named station: take its position, deadrise and figure factors
+        st = ST.find(stations or [], spec["station"])
+        spec = dict(spec)
+        x = spec.setdefault("x_over_L", st.x_over_L)
+        for k_spec, v_st in (("beta_bx", st.beta_bx), ("beta_sx", st.beta_sx), ("Kv", st.Kv), ("Fv", st.Fv),
+                             ("alpha", st.alpha), ("beta_entry", st.beta_entry)):
+            if v_st is not None:
+                spec.setdefault(k_spec, v_st)
+        used["station"] = st.name
 
     def F(name, xx, key=None):
         val = fac.resolve(name, xx, spec.get(key or name))
@@ -70,8 +80,16 @@ def resolve_pressure_detail(spec, v: P.Vessel, fac: Factors):
     raise ValueError(f"unknown pressure calc '{c}'")
 
 
-def resolve_pressure(spec, v: P.Vessel, fac: Factors) -> float:
-    return resolve_pressure_detail(spec, v, fac)[0]
+def resolve_pressure(spec, v: P.Vessel, fac: Factors, stations=None) -> float:
+    return resolve_pressure_detail(spec, v, fac, stations)[0]
+
+
+def station_table(data, v, stns, fac):
+    blk = data.get("stations") or {}
+    if not stns:
+        return {"rows": [], "FD": None}
+    FD = fac.resolve("FD", blk.get("AD_over_AR"), blk.get("FD"))
+    return {"FD": FD, "rows": ST.table(stns, v, FD)}
 
 
 def operating_limits(v: P.Vessel):
@@ -92,6 +110,7 @@ def run(data: dict) -> dict:
     v = P.Vessel(**vd)
     mat = AluminumMaterial.from_dict(data["material"])
     fac = Factors(data.get("curves"))
+    stns = ST.parse(data.get("stations"), v)
     ids = [x["id"] for x in data.get("plates", [])] + [x["id"] for x in data.get("stiffeners", [])]
     dup = sorted({i for i in ids if ids.count(i) > 1})
     if dup or "hull girder" in ids:
@@ -102,7 +121,7 @@ def run(data: dict) -> dict:
     for pl in data.get("plates", []):
         loads = {}
         for case, spec in pl["loads"].items():
-            p, used, eq, cl = resolve_pressure_detail(spec, v, fac)
+            p, used, eq, cl = resolve_pressure_detail(spec, v, fac, stns)
             loads[case] = p
             pressures[f"{pl['id']}:{case}"] = p
             plog.append({"item": pl["id"], "case": case, "p": p, "factors": used, "equation": eq, "clause": cl})
@@ -118,7 +137,7 @@ def run(data: dict) -> dict:
         kind = st.get("kind", "secondary")
         beff = effective_plate_width(kind, st["spacing_mm"], t_pl, st["l_m"])
         sec = Section(st["profile"], st["hw_mm"], st["tw_mm"], st.get("bf_mm", 0.0), st.get("tf_mm", 0.0), t_pl, beff)
-        p, used, eq, cl = resolve_pressure_detail(st["load"], v, fac)
+        p, used, eq, cl = resolve_pressure_detail(st["load"], v, fac, stns)
         pressures[f"{st['id']}:{st['member_case']}"] = p
         plog.append({"item": st["id"], "case": st["member_case"], "p": p, "factors": used, "equation": eq, "clause": cl})
         results += check_stiffener(st["id"], mat, st["member_case"], p, st["spacing_mm"] / 1000.0, st["l_m"], sec,
@@ -136,6 +155,7 @@ def run(data: dict) -> dict:
             "derived": {"delta_kg": v.delta_kg, "h13": v.h13, "H": v.H, "NhBw": v.NhBw, "d_min": v.d_min, "Cb_calc": v.Cb_calc,
                         "ncg_formula": P.ncg_formula(v), "ncg_used": P.ncg(v), "ncg_override": v.ncg_override},
             "version": __version__,
+            "station_table": station_table(data, v, stns, fac),
             "operating_limits": operating_limits(v),
             "results": [dict(asdict(r), utilisation=r.utilisation, passed=r.passed) for r in results]}
 

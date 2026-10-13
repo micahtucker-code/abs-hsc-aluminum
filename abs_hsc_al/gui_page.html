@@ -34,6 +34,9 @@ td.n{text-align:right;font-variant-numeric:tabular-nums}
 <main>
 <section id="res" hidden><h2>Results</h2><div id="out"></div><p><button class="p" onclick="openReport()">Create printable report…</button> <button onclick="dlMd()">Download summary (Markdown)</button></p></section>
 <section><h2>Project information (for the printed report)</h2><p class="hint">Appears on the report title block and sign-off page.</p><div class="grid" id="project"></div><div class="grid" style="margin-top:8px"><label>Company logo (optional, not saved in JSON)<input type="file" accept="image/*" onchange="loadAsset(this,'logo')"></label><label>Vessel image for cover (optional)<input type="file" accept="image/*" onchange="loadAsset(this,'vessel')"></label><label>Client / owner logo (optional)<input type="file" accept="image/*" onchange="loadAsset(this,'client')"></label></div></section>
+<section><h2>Stations (pressures along the length)</h2><p class="hint">Stations run from the aft perpendicular (x/L = 0) to the forward perpendicular (x/L = 1). Enter the deadrise at each section and read Kv (Fig. 4) and, for craft under 61 m, Fv (Fig. 5) from the Rule figures. Panels and stiffeners can then be tied to a station by name. Leave empty to skip.</p>
+<div class="grid"><label>Number of stations<input id="nst" type="number" value="11" min="2"></label><label>FD for the station table (Fig. 3)<input id="stFD" type="number" step="any"></label><label>&nbsp;<button onclick="genStations()">Generate evenly spaced stations</button></label></div>
+<table id="sttab" style="margin-top:8px"><thead><tr><th>Name</th><th>x/L</th><th>Bottom deadrise (deg)</th><th>Side angle (deg)</th><th>Kv</th><th>Fv</th><th>Flare α</th><th>Entry β</th><th></th></tr></thead><tbody></tbody></table><button onclick="addStation()">+ Station</button><datalist id="stnames"></datalist></section>
 <section><h2>Vessel</h2><p class="hint">Units: m, tonnes, knots, degrees. Leave blank to use the default.</p><div class="grid" id="vessel"></div></section>
 <section><h2>Aluminum material</h2><p class="hint">Take the four strengths (N/mm²) for your alloy/temper from ABS Part 2, Ch.5, Sec.5 (2-5-5). The library below fills them from 2-5-5 (unwelded) and 2-4-5 Table 2 (as-welded); you can still type your own. The example file's values are illustrative only.</p><div class="grid"><label>Library alloy<select id="alloy"></select></label><label>Plate/extrusion thickness (mm)<input id="alt" type="number" value="8"></label><label>&nbsp;<button onclick="fillAlloy()">Fill from ABS tables</button></label></div><div class="grid" id="mat" style="margin-top:8px"></div><p class="hint" id="amsg"></p></section>
 <section><h2>Plating</h2><p class="hint">Each load case is checked for thickness; secondary-stiffening and minimum thickness are added automatically.</p><div id="plates"></div><button onclick="addPlate()">+ Plate panel</button></section>
@@ -52,11 +55,11 @@ const MAT=[["name","Alloy / temper name","text"],["sigma_y_unwelded","Yield, unw
 const HG=[["SM_deck_cm3","SM at deck (cm³)"],["SM_bottom_cm3","SM at bottom (cm³)"],["I_cm4","Moment of inertia (cm⁴)"],["Cb","Cb for hull girder (opt.)"],["Mswh_kNm","Still-water hogging (kN·m, opt.)"],["Msws_kNm","Still-water sagging (kN·m, opt.)"]];
 const PCALC={
  bottom_slam_cg:[["FD","FD (Fig.3)"]],
- bottom_slam_xx:[["FD","FD"],["Kv","Kv (Fig.4)"],["Fv","Fv (Fig.5, L<61m)"],["beta_bx","Deadrise at section (deg)"]],
+ bottom_slam_xx:[["station","Station (from table)","text"],["FD","FD"],["Kv","Kv (Fig.4)"],["Fv","Fv (Fig.5, L<61m)"],["beta_bx","Deadrise at section (deg)"]],
  hydro_bottom:[],
- side_slam:[["FD","FD"],["Kv","Kv"],["beta_sx","Side deadrise βsx (deg)"]],
+ side_slam:[["station","Station (from table)","text"],["FD","FD"],["Kv","Kv"],["beta_sx","Side deadrise βsx (deg)"]],
  side_hydro:[["y","Height above baseline y (m)"],["forward_of_0125L","Fwd of 0.125L from stem","bool"]],
- side_fore_end:[["alpha","Flare angle α (deg)"],["beta_entry","Entry angle β (deg)"],["plating","Plating (else stiffeners)","bool",true]],
+ side_fore_end:[["station","Station (from table)","text"],["alpha","Flare angle α (deg)"],["beta_entry","Entry angle β (deg)"],["plating","Plating (else stiffeners)","bool",true]],
  deck:[["kind","Deck type","sel",["exposed_forward","enclosed_or_aft","accommodation","cargo","stores"]],["nxx","nxx (g)"],["W","Cargo W (kN/m²)"],["rho","Stores ρg (kN/m³)"],["h","Stores height h (m)"]],
  superstructure:[["location","Location","sel",["front_plating","front_stiffeners","side_aft_plating","side_aft_stiffeners","top_forward","top_aft"]]],
  tank:[["h","Head h (m)"],["h2","Head h2 to overflow (m)"],["nxx","nxx (g)"],["rho_g","ρg (kN/m³)"]],
@@ -74,10 +77,10 @@ $("project").innerHTML=PROJ.map(([k,l,t])=>fld(k,l,t,k==="date"?new Date().toISO
 $("hg").innerHTML=HG.map(([k,l])=>fld(k,l)).join("");
 function pressureHTML(p){p=p||{};const c=p.calc||"bottom_slam_cg";
  return `<div class="pr"><div class="grid"><label>Pressure<select data-k="calc" onchange="rebuildP(this)">${opts(Object.keys(PCALC),c)}</select></label>${pfields(c,p)}</div></div>`}
-function pfields(c,p){return PCALC[c].map(([k,l,t,x])=>t==="bool"?`<label>${l}<input type="checkbox" data-k="${k}"${(p[k]??x??false)?" checked":""}></label>`:t==="sel"?`<label>${l}<select data-k="${k}">${opts(x,p[k])}</select></label>`:fld(k,l,"number",p[k])).join("")}
+function pfields(c,p){return PCALC[c].map(([k,l,t,x])=>t==="text"?`<label>${l}<input data-k="${k}" type="text" list="stnames" value="${p[k]??""}"></label>`:t==="bool"?`<label>${l}<input type="checkbox" data-k="${k}"${(p[k]??x??false)?" checked":""}></label>`:t==="sel"?`<label>${l}<select data-k="${k}">${opts(x,p[k])}</select></label>`:fld(k,l,"number",p[k])).join("")}
 function rebuildP(sel){const g=sel.closest(".grid");[...g.children].slice(1).forEach(e=>e.remove());g.insertAdjacentHTML("beforeend",pfields(sel.value,{}))}
 function readP(el){const o={calc:el.querySelector('[data-k=calc]').value};el.querySelectorAll(".grid>label [data-k]").forEach(i=>{const k=i.dataset.k;if(k==="calc")return;
- if(i.type==="checkbox")o[k]=i.checked;else if(i.tagName==="SELECT")o[k]=i.value;else if(i.value!=="")o[k]=+i.value});
+ if(i.type==="checkbox")o[k]=i.checked;else if(i.tagName==="SELECT")o[k]=i.value;else if(i.type==="text"){if(i.value!=="")o[k]=i.value}else if(i.value!=="")o[k]=+i.value});
  if(o.calc==="value"){return {value:o.value}}return o}
 function addLoad(btn,case_,p){btn.closest(".item").querySelector(".loads").insertAdjacentHTML("beforeend",`<div class="load"><div class="grid"><label>Design-stress case<select data-k="case">${opts(META.plate_cases,case_)}</select></label></div>${pressureHTML(p)}<button class="x" onclick="this.parentNode.remove()">remove load</button></div>`)}
 function addPlate(d){d=d||{};const h=`<div class="item plate"><div class="grid">${fld("id","Name","text",d.id||"Plate")}<label>Location<select data-k="location">${opts(META.plate_locations,d.location)}</select></label>${fld("s_mm","Spacing s (mm)","number",d.s_mm)}${fld("l_mm","Panel length (mm)","number",d.l_mm)}${fld("t_mm","Thickness (mm)","number",d.t_mm)}<label>Outside midship 0.4L<input type="checkbox" data-k="outside"${d.outside_midship_0_4L?" checked":""}></label></div><div class="loads"></div><button onclick="addLoad(this)">+ load case</button> <button class="x" onclick="this.closest('.item').remove()">remove plate</button></div>`;
@@ -86,6 +89,11 @@ function addPlate(d){d=d||{};const h=`<div class="item plate"><div class="grid">
 const SF=[["id","Name","text"],["profile","Profile","sel",["flat","tee","angle","bulb"]],["hw_mm","Web height hw (mm)"],["tw_mm","Web thickness (mm)"],["bf_mm","Flange width (mm)"],["tf_mm","Flange thickness (mm)"],["t_plate_mm","Attached plate t (mm)"],["spacing_mm","Spacing (mm)"],["l_m","Span ℓ (m)"],["kind","Member kind","sel",["secondary","primary"]],["member_case","Design-stress case","sel",META.member_cases],["sigma_compr","Working compression (N/mm², opt.)"]];
 function addStiff(d){d=d||{};const f=SF.map(([k,l,t,o])=>t==="sel"?`<label>${l}<select data-k="${k}">${opts(o,d[k])}</select></label>`:fld(k,l,t||"number",d[k]??(k==="id"?"Stiffener":""))).join("");
  $("stiffs").insertAdjacentHTML("beforeend",`<div class="item stiff"><div class="grid">${f}<label>Deck member<input type="checkbox" data-k="deck"${d.deck?" checked":""}></label><label>Bottom primary<input type="checkbox" data-k="bottom_primary"${d.bottom_primary?" checked":""}></label><label>WT bhd, no end attach.<input type="checkbox" data-k="no_end_attach_wt"${d.no_end_attach_wt?" checked":""}></label></div>${pressureHTML(d.load)}<button class="x" onclick="this.closest('.item').remove()">remove</button></div>`)}
+const STF=["name","x_over_L","beta_bx","beta_sx","Kv","Fv","alpha","beta_entry"];
+function addStation(d){d=d||{};const tr=document.createElement("tr");tr.innerHTML=STF.map(k=>`<td><input data-k="${k}" type="${k==="name"?"text":"number"}" step="any" value="${d[k]??""}" style="min-width:${k==="name"?90:62}px" oninput="syncStn()"></td>`).join("")+`<td><button class="x" onclick="this.closest('tr').remove();syncStn()">x</button></td>`;$("sttab").tBodies[0].appendChild(tr);syncStn()}
+function syncStn(){$("stnames").innerHTML=[...$("sttab").tBodies[0].rows].map(r=>`<option value="${r.querySelector("[data-k=name]").value}">`).join("")}
+function genStations(){const n=Math.max(2,+$("nst").value||11);$("sttab").tBodies[0].innerHTML="";for(let i=0;i<n;i++){addStation({name:i===0?"AP":i===n-1?"FP":"Sta "+i,x_over_L:+(i/(n-1)).toFixed(3)})}}
+function readStations(){const rows=[...$("sttab").tBodies[0].rows].map(r=>{const o={};r.querySelectorAll("[data-k]").forEach(i=>{if(i.value!=="")o[i.dataset.k]=i.type==="number"?+i.value:i.value});return o});return rows}
 const num=v=>v===""?undefined:+v;
 function collect(){
  const vessel={};$("vessel").querySelectorAll("[data-k]").forEach(i=>{const k=i.dataset.k;if(i.type==="checkbox")vessel[k]=i.checked;else if(i.tagName==="SELECT")vessel[k]=i.value;else if(i.value!=="")vessel[k]=+i.value});
@@ -99,10 +107,11 @@ function collect(){
   data.plates.push({id:g("id").value,location:g("location").value,s_mm:+g("s_mm").value,l_mm:+g("l_mm").value,t_mm:+g("t_mm").value,outside_midship_0_4L:g("outside").checked,loads})});
  document.querySelectorAll(".stiff").forEach(e=>{const s={};e.querySelectorAll(":scope>.grid [data-k]").forEach(i=>{const k=i.dataset.k;if(i.type==="checkbox")s[k]=i.checked;else if(i.tagName==="SELECT"||i.type==="text")s[k]=i.value;else if(i.value!=="")s[k]=+i.value});s.load=readP(e.querySelector(".pr"));data.stiffeners.push(s)});
  const hg={};$("hg").querySelectorAll("[data-k]").forEach(i=>{if(i.value!=="")hg[i.dataset.k]=+i.value});
+ {const rows=readStations();if(rows.length){data.stations={rows};if($("stFD").value!=="")data.stations.FD=+$("stFD").value}}
  if(Object.keys(hg).length){if(!("SM_deck_cm3"in hg&&"SM_bottom_cm3"in hg&&"I_cm4"in hg))throw new Error("Hull girder needs SM deck, SM bottom and I (or leave all blank).");data.hull_girder=hg}
  return data}
 function setVals(root,d){root.querySelectorAll("[data-k]").forEach(i=>{const v=d[i.dataset.k];if(v===undefined)return;if(i.type==="checkbox")i.checked=!!v;else i.value=v})}
-function populate(d){setVals($("project"),d.project||{});setVals($("vessel"),d.vessel||{});setVals($("mat"),d.material||{});$("plates").innerHTML="";$("stiffs").innerHTML="";(d.plates||[]).forEach(addPlate);(d.stiffeners||[]).forEach(addStiff);setVals($("hg"),d.hull_girder||{})}
+function populate(d){setVals($("project"),d.project||{});setVals($("vessel"),d.vessel||{});setVals($("mat"),d.material||{});$("plates").innerHTML="";$("stiffs").innerHTML="";(d.plates||[]).forEach(addPlate);(d.stiffeners||[]).forEach(addStiff);setVals($("hg"),d.hull_girder||{});$("sttab").tBodies[0].innerHTML="";((d.stations||{}).rows||[]).forEach(addStation);$("stFD").value=(d.stations||{}).FD??"";syncStn()}
 async function fillAlloy(){const {ok,data:j}=await API.alloy($("alloy").value,$("alt").value);
  if(!ok){$("amsg").textContent=j.error;return}$("amsg").textContent="Source: "+j.source;setVals($("mat"),j)}
 async function loadExample(){populate(await API.example())}

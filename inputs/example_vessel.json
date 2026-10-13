@@ -10,7 +10,7 @@
   "checked_by": "",
   "submitted_to": "ABS",
   "notation": "A1 HSC",
-  "notes": "Illustrative input only.",
+  "notes": "Illustrative input only; Kv and Fv values in the example are placeholders, not read from the Rule figures.",
   "official_no": "0000000",
   "vessel_type": "24 m Aluminum Patrol Craft (example)",
   "department": "Hull & Structural Design",
@@ -43,14 +43,15 @@
  },
  "plates": [
   {
-   "id": "bottom plate",
+   "id": "bottom plate, MID",
    "location": "bottom",
    "s_mm": 400,
    "l_mm": 1200,
    "t_mm": 8.0,
    "loads": {
     "bottom_slam": {
-     "calc": "bottom_slam_cg",
+     "calc": "bottom_slam_xx",
+     "station": "MID",
      "FD": 0.75
     },
     "bottom_hydro": {
@@ -81,5 +82,44 @@
   "SM_deck_cm3": 9000,
   "SM_bottom_cm3": 9000,
   "I_cm4": 600000
+ },
+ "stations": {
+  "FD": 0.75,
+  "rows": [
+   {
+    "name": "AP",
+    "x_over_L": 0.0,
+    "beta_bx": 15,
+    "Fv": 1.0
+   },
+   {
+    "name": "MID AFT",
+    "x_over_L": 0.25,
+    "beta_bx": 15,
+    "Fv": 1.0
+   },
+   {
+    "name": "MID",
+    "x_over_L": 0.5,
+    "beta_bx": 15,
+    "Fv": 1.0
+   },
+   {
+    "name": "MID FWD",
+    "x_over_L": 0.75,
+    "beta_bx": 20,
+    "beta_sx": 40,
+    "Kv": 1.4,
+    "Fv": 1.0
+   },
+   {
+    "name": "FP",
+    "x_over_L": 1.0,
+    "beta_bx": 30,
+    "beta_sx": 45,
+    "Kv": 1.6,
+    "Fv": 1.0
+   }
+  ]
  }
 }

@@ -10,6 +10,8 @@ High Speed Craft (July 2022), Part 3, Chapter 2. Pure Python 3, no dependencies.
 
 **Printed report:** after *Run checks*, press *Create printable report* (web or local GUI), then *Print / Save as PDF* (or *Download HTML*). The report follows the layout of a submitted calculation set: title-block cover with official/drawing/revision numbers, running page header, summary sheets, calculation sheets showing each equation with the numbers substituted, PASS/FAIL with margin, speed-vs-wave-height table, sign-off and the input data. Fill in the *Project information* section first; logos and a cover image can be attached there.
 
+**Stations:** the *Stations* section (or `"stations"` in the JSON) takes x/L, deadrise, Kv and Fv for each station from AP to FP. The report then includes a station-by-station table of bottom slamming, side slamming and fore-end pressure, and any plate or stiffener can be tied to a station by name (`"station": "MID"` in its pressure). Kv and Fv come from the Rule figures and are never assumed.
+
 Exit code is 0 when every check passes, 1 otherwise.
 
 ## What it checks
