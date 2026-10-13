@@ -81,3 +81,17 @@ text is inconsistent or silent, the value is derived and flagged in the report (
 - 3-2-2/3.3.3 (multi-hull fore-end pressure): the US line prints 0.28 where 3-2-2/1.3.3 prints 0.92; 0.92 is dimensionally consistent and is used.
 - 3-2-2/1.1.3 TABLE 2 (FD minimum): 500 mm is printed as 16.75 in. (19.7 in. by conversion); the printed value is used.
 - US constants rounded by the Rule (N1 0.069, qa 17000/sigma, 0.015/0.013/0.011 in minimum-thickness coefficients, C2 1.44e-4, k 0.2797 ...) do not convert exactly from the SI ones, so SI and US results for the same craft differ by a few percent.
+
+## Design history: projects and revisions (v0.9)
+
+The GUI has a **Design history** panel. Fill in the design, press *Check and save as new revision* at each design phase
+(Concept, Preliminary, ...). Each revision stores the complete inputs plus the check results at that moment and is never
+overwritten. *Save project file* downloads one `<name>.hscproj.json` holding every revision (and the report logo/images); *Open
+project file* restores it and loads the latest revision. Open any revision, edit, and save the result as the next one.
+*Compare revisions* shows utilisation per item side by side, flags items that started failing or are fixed between revisions,
+and exports CSV. *Recheck all revisions* re-runs every saved revision with the current program version (the comparison warns
+when revisions were checked with different versions). A working draft is also autosaved in the browser and offered on reload;
+the project file is the record you keep.
+
+Command line: `python -m abs_hsc_al project.hscproj.json` checks the latest revision (`--rev R2` for another),
+`--compare [--csv out.csv]` prints the comparison. Code: `abs_hsc_al/project.py`.

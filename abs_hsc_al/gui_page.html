@@ -30,11 +30,18 @@ td.n{text-align:right;font-variant-numeric:tabular-nums}
 <button onclick="loadExample()">Load example</button>
 <button onclick="document.getElementById('f').click()">Open JSON…</button>
 <input type="file" id="f" accept=".json" hidden onchange="openFile(this)">
-<button onclick="saveJSON()">Save JSON</button>
+<button onclick="saveJSON()" title="Single set of inputs, no history">Save inputs (JSON)</button>
 <button class="p" onclick="runCheck()">Run checks</button></header>
 <main>
+<section id="proj" data-nou><h2>Design history (project)</h2><p class="hint">Save the design as a numbered revision at each design phase. Each revision keeps the full inputs and its check results, so you can reopen it, keep editing, and compare how the structure stays within the Rules as the design evolves. A project is one <code>.hscproj.json</code> file you keep; a working draft is also kept automatically in this browser.</p>
+<div id="pj_draft" class="warn" hidden style="background:var(--okbg);color:var(--ink)"></div>
+<div class="grid"><label>Project name<input id="pname" type="text" placeholder="e.g. Hull 12 aluminum catamaran" oninput="PNAME_EDIT()"></label>
+<label>Revision label<input id="plabel" type="text" placeholder="e.g. Concept, Preliminary, Contract"></label>
+<label style="grid-column:span 2">Note (what changed)<input id="pnote" type="text" placeholder="e.g. bottom plate 6 to 8 mm, spacing 350 to 400"></label></div>
+<p style="margin:8px 0 0"><button class="p" onclick="saveRev()">Check and save as new revision</button> <button onclick="compareRevs()">Compare revisions</button> <button onclick="saveProject()">Save project file</button> <button onclick="document.getElementById('pf').click()">Open project file…</button><input type="file" id="pf" accept=".json" hidden onchange="openProject(this)"> <button onclick="newProject()">New project</button> <span id="pj_state" class="hint"></span></p>
+<div id="pj_msg"></div><div id="pj_list"></div></section>
 <section id="res" hidden><h2>Results</h2><div id="out"></div><p><button class="p" onclick="openReport()">Create printable report…</button> <button onclick="dlMd()">Download summary (Markdown)</button></p></section>
-<section><h2>Project information (for the printed report)</h2><p class="hint">Appears on the report title block and sign-off page.</p><div class="grid" id="project"></div><div class="grid" style="margin-top:8px"><label>Company logo (optional, not saved in JSON)<input type="file" accept="image/*" onchange="loadAsset(this,'logo')"></label><label>Vessel image for cover (optional)<input type="file" accept="image/*" onchange="loadAsset(this,'vessel')"></label><label>Client / owner logo (optional)<input type="file" accept="image/*" onchange="loadAsset(this,'client')"></label></div></section>
+<section><h2>Project information (for the printed report)</h2><p class="hint">Appears on the report title block and sign-off page.</p><div class="grid" id="project"></div><div class="grid" style="margin-top:8px"><label>Company logo (optional, kept in the project file, not in plain JSON)<input type="file" accept="image/*" onchange="loadAsset(this,'logo')"></label><label>Vessel image for cover (optional)<input type="file" accept="image/*" onchange="loadAsset(this,'vessel')"></label><label>Client / owner logo (optional)<input type="file" accept="image/*" onchange="loadAsset(this,'client')"></label></div></section>
 <section><h2>Stations (pressures along the length)</h2><p class="hint">Stations run from the aft perpendicular (x/L = 0) to the forward perpendicular (x/L = 1). Enter the deadrise at each section and read Kv (Fig. 4) and, for craft under 61 m, Fv (Fig. 5) from the Rule figures. Panels and stiffeners can then be tied to a station by name. Leave empty to skip.</p>
 <div class="grid"><label>Number of stations<input id="nst" type="number" value="11" min="2"></label><label>FD for the station table (Fig. 3)<input id="stFD" type="number" step="any"></label><label>&nbsp;<button onclick="genStations()">Generate evenly spaced stations</button></label></div>
 <table id="sttab" style="margin-top:8px"><thead><tr><th>Name</th><th>x/L</th><th>Bottom deadrise (deg)</th><th>Side angle (deg)</th><th>Kv</th><th>Fv</th><th>Flare α</th><th>Entry β</th><th></th></tr></thead><tbody></tbody></table><button onclick="addStation()">+ Station</button><datalist id="stnames"></datalist></section>
@@ -52,6 +59,7 @@ td.n{text-align:right;font-variant-numeric:tabular-nums}
 <div class="grid"><label>Offered SMt of the cross deck (cm²-m, overrides the section)<input id="csSM" type="number" step="any"></label><label>Offered shear area At (cm², overrides the section)<input id="csAt" type="number" step="any"></label></div>
 <table id="cstab" style="margin-top:8px"><thead><tr><th>Element</th><th>x from FP (m)</th><th>Span L (m)</th><th>I (cm⁴)</th><th>SM (cm³)</th><th>Web area Aw (cm²)</th><th></th></tr></thead><tbody></tbody></table><button onclick="addRowTo('cstab',CSC)">+ Element</button></section>
 <p class="hint" style="margin-top:24px">__FOOTER__</p></main>
+<div id="cmp" hidden style="position:fixed;inset:0;background:var(--bg);z-index:11;display:flex;flex-direction:column"><div style="padding:8px 16px;border-bottom:1px solid var(--line);background:var(--card);display:flex;gap:8px;align-items:center;flex-wrap:wrap"><b style="flex:1">Revision comparison</b><button onclick="recheckAll()" title="Re-run every saved revision with this version of the program">Recheck all revisions</button><button onclick="dlCmpCsv()">Download CSV</button><button onclick="document.getElementById('cmp').hidden=true">Close</button></div><div id="cmpbody" style="flex:1;overflow:auto;padding:12px 16px"></div></div>
 <div id="rv" hidden style="position:fixed;inset:0;background:var(--bg);z-index:10;display:flex;flex-direction:column"><div style="padding:8px 16px;border-bottom:1px solid var(--line);background:var(--card);display:flex;gap:8px;align-items:center"><b style="flex:1">Calculation report preview</b><button class="p" onclick="printReport()">Print / Save as PDF</button><button onclick="dlReportHtml()">Download HTML</button><button onclick="closeReport()">Close</button></div><iframe id="rvf" style="flex:1;border:0;background:#fff"></iframe></div>
 <script>
 const META=__META__;
@@ -144,7 +152,7 @@ function populate(d){applyUnits(d.units||"SI");setVals($("project"),d.project||{
 async function fillAlloy(){const {ok,data:j}=await API.alloy($("alloy").value,$("alt").value,UNITS);
  if(!ok){$("amsg").textContent=j.error;return}$("amsg").textContent="Source: "+j.source;setVals($("mat"),j)}
 async function loadExample(){let ex=await API.example();if(UNITS==="US"){const r=await API.convert(ex,"US");if(r.ok)ex=r.data}populate(ex)}
-function openFile(inp){const r=new FileReader();r.onload=()=>{try{populate(JSON.parse(r.result))}catch(e){alert("Could not read file: "+e)}};r.readAsText(inp.files[0])}
+function openFile(inp){const r=new FileReader();r.onload=()=>{try{const d=JSON.parse(r.result);if(d&&d.format==="abs-hsc-aluminum-project")loadProjectText(r.result);else{populate(d);DIRTY=true;BASE=null;renderProj()}}catch(e){alert("Could not read file: "+e)}};r.readAsText(inp.files[0]);inp.value=""}
 function dl(name,text,type){const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([text],{type}));a.download=name;a.click()}
 function saveJSON(){try{dl("vessel.json",JSON.stringify(collect(),null,2),"application/json")}catch(e){alert(e.message)}}
 let MD="",LAST=null;function dlMd(){dl("report.md",MD,"text/markdown")}
@@ -228,4 +236,73 @@ function populateShear(d){$("shtab").tBodies[0].innerHTML="";$("cstab").tBodies[
  (hs.stations||[]).forEach(o=>addRowTo("shtab",SHC,o));$("shM").value=hs.m_cm3??"";$("shTs").value=hs.ts_mm??"";$("shN").value=hs.n_webs??"";$("shComb").checked=hs.combined_sum!==false;
  (cs.elements||[]).forEach(o=>addRowTo("cstab",CSC,o));$("csSM").value=cs.SMt_cm2m??"";$("csAt").value=cs.At_cm2??"";SE.cd.populate(cs.section)}
 addPlate();
+
+// ---- design history: revisions, project file, comparison, autosave
+let HP=null,BASE=null,DIRTY=false,CMP=null;const DRAFT_KEY="abs_hsc_draft_v1";
+const esc=t=>String(t??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+function PNAME_EDIT(){if(HP)HP.name=$("pname").value}
+function pjMsg(t,bad){$("pj_msg").innerHTML=t?`<div class="${bad?"warn":"hint"}" style="margin-top:8px">${esc(t)}</div>`:""}
+function renderProj(){
+ $("pj_state").textContent=BASE?`Working from ${BASE}${DIRTY?" – unsaved changes":""}`:(DIRTY?"Unsaved design":"");
+ const L=$("pj_list");if(!HP||!HP.revisions.length){L.innerHTML='<p class="hint" style="margin-top:10px">No revisions saved yet.</p>';return}
+ L.innerHTML='<table style="margin-top:10px"><tr><th>Rev</th><th>Label</th><th>Saved</th><th>Units</th><th>Checks</th><th>Max utilisation</th><th>Note</th><th></th></tr>'+HP.revisions.map(r=>{const m=r.summary;
+  return `<tr${r.id===BASE?' style="background:var(--okbg)"':""}><td><b>${esc(r.id)}</b></td><td>${esc(r.label)}</td><td>${esc(new Date(r.date).toLocaleString())}</td><td>${m.units}</td><td><span class="${m.n_fail?"fail":"pass"}">${m.n-m.n_fail}/${m.n} pass</span></td><td class="n">${m.max_util.toFixed(2)}</td><td>${esc(r.note)}</td><td style="white-space:nowrap"><button onclick="openRev('${r.id}')">Open</button> <button class="x" onclick="delRev('${r.id}')">Delete</button></td></tr>`}).join("")+"</table>"}
+async function saveRev(){
+ let data;try{data=collect()}catch(e){pjMsg(e.message,true);return}
+ if(HP)HP.name=$("pname").value||HP.name;
+ const o={project:HP,inputs:data,label:$("plabel").value,note:$("pnote").value};
+ pjMsg("Checking…");const {ok,data:j}=await API.proj("add",o);
+ if(!ok){pjMsg(j.error,true);return}
+ HP=j.project;HP.name=$("pname").value||HP.name||"Untitled project";HP.assets=Object.assign({},ASSETS);BASE=j.id;DIRTY=false;
+ $("plabel").value="";$("pnote").value="";const s=j.summary;
+ pjMsg(`Saved ${j.id}: ${s.n-s.n_fail} of ${s.n} checks pass`+(s.n_fail?`, ${s.n_fail} fail`:"")+". Remember to save the project file to keep it.");
+ renderProj();autosaveNow()}
+function openRev(id){const r=HP.revisions.find(x=>x.id===id);if(!r)return;
+ if(DIRTY&&!confirm("You have unsaved changes in the form. Open "+id+" and discard them?"))return;
+ populate(JSON.parse(JSON.stringify(r.inputs)));ASSETS=Object.assign({},HP.assets||{});BASE=id;DIRTY=false;pjMsg(`Opened ${id}. Edit freely, then save as a new revision (saved revisions are never overwritten).`);renderProj();autosaveNow()}
+function delRev(id){if(!confirm("Delete revision "+id+" from this project? This cannot be undone."))return;HP.revisions=HP.revisions.filter(x=>x.id!==id);if(BASE===id)BASE=null;renderProj();autosaveNow()}
+function saveProject(){if(!HP||!HP.revisions.length){pjMsg("Save at least one revision first.",true);return}
+ HP.name=$("pname").value||HP.name;HP.assets=Object.assign({},ASSETS);HP.modified=new Date().toISOString().replace(/\.\d+Z$/,"Z");
+ dl((HP.name||"project").replace(/[^A-Za-z0-9_-]+/g,"_")+".hscproj.json",JSON.stringify(HP,null,1),"application/json");pjMsg("Project file downloaded.")}
+async function loadProjectText(text){const {ok,data:j}=await API.proj("load",text);if(!ok){alert(j.error);return false}
+ HP=j;$("pname").value=HP.name||"";ASSETS=Object.assign({},HP.assets||{});
+ const last=HP.revisions[HP.revisions.length-1];if(last){populate(JSON.parse(JSON.stringify(last.inputs)));BASE=last.id}else BASE=null;
+ DIRTY=false;pjMsg(`Opened project "${HP.name}" at ${BASE||"(no revisions)"}.`);renderProj();autosaveNow();return true}
+function openProject(inp){const f=inp.files[0];if(!f)return;if(DIRTY&&!confirm("Discard unsaved changes in the form?")){inp.value="";return}
+ const r=new FileReader();r.onload=()=>loadProjectText(r.result);r.readAsText(f);inp.value=""}
+function newProject(){if((DIRTY||HP)&&!confirm("Start a new project? Make sure the current project file is saved."))return;HP=null;BASE=null;DIRTY=false;$("pname").value="";pjMsg("");renderProj();autosaveNow()}
+// comparison
+function ucell(c,prev){if(!c)return '<td class="n" style="color:var(--mute)">–</td>';
+ const d=prev?c.utilisation-prev.utilisation:0,arrow=prev&&Math.abs(d)>=0.005?(d>0?" ▲":" ▼"):"";
+ return `<td class="n" style="${c.passed?"":"background:var(--badbg);color:var(--bad);font-weight:600"}">${c.utilisation.toFixed(2)}${c.passed?"":" FAIL"}<span style="color:var(--mute);font-weight:400">${arrow}</span></td>`}
+async function compareRevs(){if(!HP||HP.revisions.length<1){pjMsg("Save at least one revision to compare.",true);return}
+ const {ok,data:c}=await API.proj("compare",{project:HP});if(!ok){pjMsg(c.error,true);return}CMP=c;
+ const H=c.revisions,list=(a,t,cls)=>a.length?`<li><span class="${cls}">${t}</span> ${a.map(esc).join("; ")}</li>`:"";
+ let h=(c.warnings||[]).map(w=>`<div class="warn">${esc(w)}</div>`).join("");
+ h+='<p class="hint">Utilisation = demand / allowable (1.00 is the limit). ▲/▼ show the change from the previous revision. Revisions in different unit systems compare fine because utilisation has no units.</p>';
+ h+='<table><tr><th>Item</th><th>Check</th><th>Clause</th>'+H.map(x=>`<th title="${esc(x.note)}">${esc(x.id)}<br><span style="font-weight:400">${esc(x.label)}</span></th>`).join("")+"</tr>";
+ h+='<tr><td colspan="3"><b>Checks failing</b></td>'+H.map(x=>`<td class="n"><span class="${x.n_fail?"fail":"pass"}">${x.n_fail} of ${x.n}</span></td>`).join("")+"</tr>";
+ h+='<tr><td colspan="3"><b>Highest utilisation</b></td>'+H.map(x=>`<td class="n">${x.max_util.toFixed(2)}</td>`).join("")+"</tr>";
+ h+=c.rows.map(r=>`<tr><td>${esc(r.id)}</td><td>${esc(r.kind)}</td><td>${esc(r.clause)}</td>`+r.cells.map((x,i)=>ucell(x,i?r.cells[i-1]:null)).join("")+"</tr>").join("")+"</table>";
+ if(c.changes.length){h+="<h3 style='font-size:14px;margin-top:18px'>Changes between revisions</h3>"+c.changes.map(x=>`<p style="margin:10px 0 2px"><b>${esc(x.from)} → ${esc(x.to)}</b></p><ul style="margin:0;padding-left:18px">`+
+  list(x.regressions,"Now failing:","fail")+list(x.fixed,"Now passing:","pass")+list(x.added,"New items:","hint")+list(x.removed,"Items removed:","hint")+
+  (x.moves.length?`<li>Largest utilisation changes: ${x.moves.map(m=>esc(m.key)+" "+(m.delta>0?"+":"")+m.delta.toFixed(2)).join("; ")}</li>`:"")+
+  (!x.regressions.length&&!x.fixed.length&&!x.added.length&&!x.removed.length&&!x.moves.length?"<li>No change in results.</li>":"")+"</ul>").join("")}
+ $("cmpbody").innerHTML=h;$("cmp").hidden=false}
+function dlCmpCsv(){if(CMP)dl((HP.name||"project").replace(/[^A-Za-z0-9_-]+/g,"_")+"_revisions.csv",CMP.csv,"text/csv")}
+async function recheckAll(){if(!confirm("Re-run every saved revision with this version of the program? Saved results are replaced; inputs are not changed."))return;
+ const {ok,data:j}=await API.proj("recheck",{project:HP});if(!ok){alert(j.error);return}HP=j.project;renderProj();await compareRevs();
+ pjMsg(j.changed.length?"Pass/fail pattern changed for: "+j.changed.join(", "):"Rechecked: no pass/fail changes.")}
+// autosave of the working draft (this browser only)
+let _ast=null;function autosaveNow(){try{const d={proj:HP,base:BASE,dirty:DIRTY,ts:Date.now(),name:$("pname").value};SOFT=true;try{d.inputs=collect()}finally{SOFT=false}
+ localStorage.setItem(DRAFT_KEY,JSON.stringify(d))}catch(e){try{localStorage.removeItem(DRAFT_KEY)}catch(_){}}}
+function markDirty(ev){if(ev.target.closest&&ev.target.closest("#proj,#cmp,#rv"))return;if(!DIRTY){DIRTY=true;renderProj()}clearTimeout(_ast);_ast=setTimeout(autosaveNow,1500)}
+document.addEventListener("input",markDirty);document.addEventListener("change",markDirty);
+window.addEventListener("beforeunload",e=>{if(DIRTY){e.preventDefault();e.returnValue=""}});
+function offerDraft(){let d;try{d=JSON.parse(localStorage.getItem(DRAFT_KEY)||"null")}catch(e){return}
+ if(!d||!d.inputs||!(d.dirty||(d.proj&&d.proj.revisions&&d.proj.revisions.length)))return;
+ const b=$("pj_draft");b.hidden=false;b.innerHTML=`A working draft from ${esc(new Date(d.ts).toLocaleString())} is stored in this browser`+(d.proj?` (project "${esc(d.proj.name||"")}", ${d.proj.revisions.length} revision${d.proj.revisions.length===1?"":"s"})`:"")+`. <button class="p" id="pj_rest">Restore it</button> <button id="pj_disc">Discard</button>`;
+ $("pj_rest").onclick=()=>{HP=d.proj||null;BASE=d.base||null;$("pname").value=d.name||(HP&&HP.name)||"";ASSETS=Object.assign({},(HP&&HP.assets)||{});populate(d.inputs);DIRTY=!!d.dirty;b.hidden=true;renderProj()};
+ $("pj_disc").onclick=()=>{try{localStorage.removeItem(DRAFT_KEY)}catch(e){}b.hidden=true}}
+renderProj();offerDraft();
 </script></body></html>

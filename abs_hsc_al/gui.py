@@ -23,7 +23,8 @@ _SERVER_API = """const API={
  async example(){return (await fetch("/example")).json()},
  async dxf(t,pl,u,y0,z0,us){const r=await fetch("/dxf",{method:"POST",body:JSON.stringify({text:t,plane:pl,unit:u,y0:y0,z0:z0,units:us||"SI"})});return r.json()},
  async section(d,us){const r=await fetch("/section?units="+(us||"SI"),{method:"POST",body:JSON.stringify(d)});return r.json()},
- async convert(d,to){const r=await fetch("/convert?to="+to,{method:"POST",body:JSON.stringify(d)});return r.json()}};"""
+ async convert(d,to){const r=await fetch("/convert?to="+to,{method:"POST",body:JSON.stringify(d)});return r.json()},
+ async proj(op,o){const r=await fetch("/project?op="+op,{method:"POST",body:op==="load"?o:JSON.stringify(o)});return r.json()}};"""
 PAGE = (open(os.path.join(HERE, "gui_page.html"), encoding="utf-8").read()
         .replace("/*__API__*/", _SERVER_API)
         .replace("/*__REPORT__*/", open(os.path.join(HERE, "report_view.js"), encoding="utf-8").read()).replace("__FOOTER__", "Local version. Supports a designer's check; not an ABS approval."))
@@ -62,6 +63,9 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         path = urlparse(self.path).path
         q = parse_qs(urlparse(self.path).query)
+        if path == "/project":
+            n = int(self.headers.get("Content-Length", 0))
+            return self._send(200, webapi.project_json(q.get("op", [""])[0], self.rfile.read(n).decode("utf-8")).encode())
         if path in ("/dxf", "/section", "/convert"):
             n = int(self.headers.get("Content-Length", 0))
             body = json.loads(self.rfile.read(n))
