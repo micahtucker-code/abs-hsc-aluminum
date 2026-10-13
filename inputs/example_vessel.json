@@ -78,11 +78,6 @@
    }
   }
  ],
- "hull_girder": {
-  "SM_deck_cm3": 9000,
-  "SM_bottom_cm3": 9000,
-  "I_cm4": 600000
- },
  "stations": {
   "FD": 0.75,
   "rows": [
@@ -119,6 +114,58 @@
     "beta_sx": 45,
     "Kv": 1.6,
     "Fv": 1.0
+   }
+  ]
+ },
+ "section": {
+  "mirror": true,
+  "members": [
+   {
+    "name": "bottom shell",
+    "y1": 0,
+    "z1": 0,
+    "y2": 2800,
+    "z2": 400,
+    "t_mm": 8,
+    "stiffeners": {
+     "profile": "tee",
+     "spacing_mm": 300,
+     "hw_mm": 100,
+     "tw_mm": 6,
+     "bf_mm": 50,
+     "tf_mm": 8,
+     "side": "in"
+    }
+   },
+   {
+    "name": "side shell",
+    "y1": 2800,
+    "z1": 400,
+    "y2": 3000,
+    "z2": 3000,
+    "t_mm": 6,
+    "stiffeners": {
+     "profile": "flat",
+     "spacing_mm": 350,
+     "hw_mm": 80,
+     "tw_mm": 6,
+     "side": "in"
+    }
+   },
+   {
+    "name": "main deck",
+    "y1": 0,
+    "z1": 3000,
+    "y2": 3000,
+    "z2": 3000,
+    "t_mm": 6,
+    "stiffeners": {
+     "profile": "flat",
+     "spacing_mm": 300,
+     "hw_mm": 80,
+     "tw_mm": 6,
+     "side": "in"
+    }
    }
   ]
  }

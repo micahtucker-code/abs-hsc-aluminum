@@ -34,3 +34,8 @@ catamaran cross-structure stress analysis (only loads and allowables), hydrofoil
 - 6061-T6 welded values change at 9.5 mm (yield 138 below, 103 above).
 - 5086-H116 plate band 3-6.3 mm and 6.3-50 mm have identical values; merged.
 - Not in the library: 5059 (no welded row), 5083-H128, 5086-H321, 6082, 6005A, 6063, and non-marine 5083-H111/H112 plate (published welded yield exceeds the unwelded minimum).
+
+
+## Midship section calculator (not a Rule item)
+
+3-2-1 gives SM and I requirements; how the provided values are calculated is left to the designer. The calculator idealises the section as thin straight members (A = l t; own inertia t l^3 sin^2(a)/12 + l t^3 cos^2(a)/12 about the horizontal centroidal axis) and uses the parallel-axis theorem about the neutral axis. SM deck = I/(z deck - z NA), SM bottom = I/(z NA - z base); the deck and baseline default to the highest and lowest points of the drawn members unless given. Stiffener webs start at the plate surface and flanges are centred (tee) or one-sided (angle) at the web tip. Plating is not reduced for buckling or shear lag; the designer should confirm that this is acceptable to the reviewing body, or reduce the effectiveness of compressed panels.

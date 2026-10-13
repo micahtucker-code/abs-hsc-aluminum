@@ -9,6 +9,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from urllib.parse import urlparse, parse_qs
 from .report import run, markdown
+from . import webapi
 from .alloys import list_alloys, lookup
 from .plating import DESIGN_STRESS_FACTOR, MIN_THICKNESS
 from .stiffeners import SIGMA_A_FACTOR
@@ -19,7 +20,9 @@ EXAMPLE = os.path.join(HERE, "..", "inputs", "example_vessel.json")
 _SERVER_API = """const API={
  async run(d){const r=await fetch("/run",{method:"POST",body:JSON.stringify(d)});return {ok:r.ok,data:await r.json()}},
  async alloy(a,t){const r=await fetch("/alloy?alloy="+encodeURIComponent(a)+"&t="+t);return {ok:r.ok,data:await r.json()}},
- async example(){return (await fetch("/example")).json()}};"""
+ async example(){return (await fetch("/example")).json()},
+ async dxf(t,pl,u,y0,z0){const r=await fetch("/dxf",{method:"POST",body:JSON.stringify({text:t,plane:pl,unit:u,y0:y0,z0:z0})});return r.json()},
+ async section(d){const r=await fetch("/section",{method:"POST",body:JSON.stringify(d)});return r.json()}};"""
 PAGE = (open(os.path.join(HERE, "gui_page.html"), encoding="utf-8").read()
         .replace("/*__API__*/", _SERVER_API)
         .replace("/*__REPORT__*/", open(os.path.join(HERE, "report_view.js"), encoding="utf-8").read()).replace("__FOOTER__", "Local version. Supports a designer's check; not an ABS approval."))
@@ -56,6 +59,14 @@ class Handler(BaseHTTPRequestHandler):
             self._send(404, b'{"error":"not found"}')
 
     def do_POST(self):
+        if self.path in ("/dxf", "/section"):
+            n = int(self.headers.get("Content-Length", 0))
+            body = json.loads(self.rfile.read(n))
+            if self.path == "/dxf":
+                out = webapi.dxf_json(body["text"], body.get("plane", "xy"), body.get("unit", ""), str(body.get("y0", "")), str(body.get("z0", "")))
+            else:
+                out = webapi.section_json(json.dumps(body))
+            return self._send(200, out.encode())
         if self.path != "/run":
             return self._send(404, b'{"error":"not found"}')
         try:

@@ -32,7 +32,7 @@ Exit code is 0 when every check passes, 1 otherwise.
 2. **Graph-based factors**: FD, Kv, Fv, wet-deck F1, hull-girder M, shear F1/F2. Give a direct value
    (e.g. `"FD": 0.62`) or a digitised curve under `curves` (see `figures.py`). A missing factor stops
    with an error naming the figure.
-3. Section properties of the hull girder (`SM_deck_cm3`, `SM_bottom_cm3`, `I_cm4`) from your own midship section.
+3. Section properties of the hull girder: either build the midship section in the program (see below) or type `SM_deck_cm3`, `SM_bottom_cm3`, `I_cm4` from your own calculation.
 
 ## Input format
 See `inputs/example_vessel.json`. Units: m, mm, tonnes, knots, kN/m2, N/mm2. Pressures can be given as a
@@ -40,3 +40,14 @@ number or as `{"calc": "bottom_slam_cg", "FD": 0.75}` etc. (see `report.resolve_
 
 See `RULE_REFERENCE.md` for clause mapping, interpretation choices and what is not implemented.
 This tool supports a designer's check; it is not an ABS approval.
+
+
+## Midship section calculator (v0.5)
+
+The *Midship section properties* block computes area, neutral axis, I and the deck and bottom section moduli and feeds them to the hull girder check (leave the three manual hull girder fields blank).
+
+- **Members:** plate lines (y from the centreline, z up from the baseline, mm) with an optional regular set of flat-bar, tee or angle stiffeners, an effectiveness factor (0 to 1), and free-standing `lump` areas in the JSON file (catalogue extrusions, bulbs, negative lumps for openings).
+- **Half sections:** tick *enter one side only* to mirror about the centreline; members lying on the centreline are counted once.
+- **DXF import:** export the section as an ASCII DXF (LINE, LWPOLYLINE with arcs, POLYLINE, ARC and CIRCLE are read; SPLINE, ELLIPSE and INSERT blocks are reported and skipped, so explode blocks first). Pick the drawing plane and units, then give each layer a thickness (layer names such as `T8` or `PL_10` are suggested automatically). Layers without a thickness are listed in a warning and left out. A sample is in `inputs/example_section.dxf`.
+- **PDF drawings** are not read directly; convert to DXF in your CAD package.
+- The report adds section 11.1 with the properties table, a drawing of the idealised section and a per-group contribution table. Limits: no plate-buckling effective-width reduction, no shear lag, a single alloy.

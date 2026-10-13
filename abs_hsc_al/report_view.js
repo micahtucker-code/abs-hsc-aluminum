@@ -18,12 +18,22 @@ table{border-collapse:collapse;width:100%;margin:1.5mm 0 3mm;font-size:8.4pt}th,
 th{background:#e3eaf1;font-weight:600}td.n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
 tr{page-break-inside:avoid}.kv td:first-child{width:40%;background:#f3f6f9;font-weight:600}
 td.ok,.ok{background:#d9f2e0;color:#0a5b32;font-weight:700;text-align:center}td.bad,.bad{background:#fbd9dc;color:#a0001c;font-weight:700;text-align:center}
-.eq{font-family:Consolas,monospace;font-size:7.8pt}.wk{font-size:7.8pt;color:#333}.small{font-size:8pt;color:#333}
+.eq{font-family:Consolas,monospace;font-size:7.8pt}.wk{font-size:7.8pt;color:#333}.small{font-size:8pt;color:#333}.fig{margin:6px 0;text-align:center;page-break-inside:avoid}
 .box{border:1px solid #123;padding:2.5mm 3mm;margin:3mm 0;background:#f7f9fb}.warn{border-color:#a0001c;background:#fdf0f0}
 .sig td{height:13mm}pre{font-size:7pt;white-space:pre-wrap;word-break:break-word;border:1px solid #ccd;padding:2mm;background:#fafbfc}
 ul,ol{margin:1mm 0 2mm 5mm;padding:0}li{margin:.6mm 0}.toc td{border:0;border-bottom:1px dotted #999;padding:1mm}
 @media print{body{padding:0}}
 `;
+function sectionSVG(r,opt){opt=opt||{};const g=r.geometry||[],bb=r.bbox,W0=bb[2]-bb[0],H0=bb[3]-bb[1],pad=Math.max(W0,H0)*0.06+20;
+ const x0=bb[0]-pad,y0=-(bb[3]+pad),w=W0+2*pad,h=H0+2*pad,sw=Math.max(w,h)/700;
+ const lines=g.map(a=>{const th=Math.max(a[4]*(opt.exag||1),sw*1.2),col=a[6]===0?"#98a2b3":a[5]==="plate"?"#1f5fbf":"#c2410c";
+  return `<line x1="${a[0]}" y1="${-a[1]}" x2="${a[2]}" y2="${-a[3]}" stroke="${col}" stroke-width="${th.toFixed(2)}" stroke-linecap="butt"${a[6]===0?' stroke-dasharray="'+sw*6+' '+sw*4+'"':""}/>`}).join("");
+ const lumps=(r.lumps||[]).map(a=>`<circle cx="${a[0]}" cy="${-a[1]}" r="${Math.max(Math.sqrt(a[2]/Math.PI),sw*2).toFixed(1)}" fill="#c2410c"/>`).join("");
+ const fs=Math.max(w,h)/45,yn=-r.z_NA_mm;
+ const ax=`<line x1="${x0}" y1="${yn}" x2="${x0+w}" y2="${yn}" stroke="#b42318" stroke-width="${sw*1.2}" stroke-dasharray="${sw*10} ${sw*5}"/><text x="${x0+w-fs*0.3}" y="${yn-fs*0.4}" font-size="${fs}" fill="#b42318" text-anchor="end" font-family="sans-serif">N.A. z = ${r.z_NA_mm.toFixed(0)} mm</text>`
+ +`<line x1="${x0}" y1="${-r.z_deck_mm}" x2="${x0+w}" y2="${-r.z_deck_mm}" stroke="#667085" stroke-width="${sw*0.6}" stroke-dasharray="${sw*3} ${sw*5}"/><text x="${x0+fs*0.3}" y="${-r.z_deck_mm-fs*0.4}" font-size="${fs}" fill="#667085" font-family="sans-serif">deck z = ${r.z_deck_mm.toFixed(0)}</text>`
+ +`<line x1="${x0}" y1="${-r.z_bottom_mm}" x2="${x0+w}" y2="${-r.z_bottom_mm}" stroke="#667085" stroke-width="${sw*0.6}" stroke-dasharray="${sw*3} ${sw*5}"/><text x="${x0+fs*0.3}" y="${-r.z_bottom_mm+fs*1.1}" font-size="${fs}" fill="#667085" font-family="sans-serif">baseline z = ${r.z_bottom_mm.toFixed(0)}</text>`;
+ return `<svg viewBox="${x0} ${y0} ${w} ${h}" style="width:100%;max-height:${opt.maxh||"420px"};background:${opt.bg||"transparent"}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Midship section">${lines}${lumps}${ax}</svg>`}
 function _e(s){return String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]))}
 function _n(x,d){if(x===undefined||x===null||x===""||isNaN(x))return"";const a=Math.abs(x);return (+x).toFixed(d??(a>=1000?0:a>=100?1:a>=10?2:3))}
 function _kv(rows){return `<table class="kv">`+rows.filter(r=>r[1]!==undefined&&r[1]!==""&&r[1]!==null).map(r=>`<tr><td>${_e(r[0])}</td><td>${_e(r[1])}</td></tr>`).join("")+`</table>`}
@@ -34,7 +44,8 @@ function _resRows(list){return list.map(x=>`<tr><td>${_e(x.kind)}<div class="sma
 function _resTable(list){return `<table><tr><th style="width:16%">Check / Rule clause</th><th>Equation and working</th><th>Required</th><th>Provided</th><th>Check</th><th>Margin</th></tr>${_resRows(list)}</table>`}
 const _MM_IN=1/25.4,_KPA_PSI=0.145038,_M_FT=3.28084;
 const _LIMITS=[
- "Longitudinal hull girder: section modulus and inertia are checked against 3-2-1/1.1.1, 1.1.2 (craft of 61 m and over) and 1.5, using section properties calculated by the designer. Hull girder shear (1.9) and catamaran cross-structure stress analysis (3-2-1/3.5) are not evaluated.",
+ "Longitudinal hull girder: section modulus and inertia are checked against 3-2-1/1.1.1, 1.1.2 (craft of 61 m and over) and 1.5, using section properties from the midship section calculation (or supplied by the designer). Hull girder shear (1.9) and catamaran cross-structure stress analysis (3-2-1/3.5) are not evaluated.",
+ "Midship section properties assume every plate and stiffener acts at full thickness: no effective-width reduction of compressed plating, no shear lag, and a single alloy. Openings must be entered as zero-effectiveness members or negative lumps by the designer.",
  "Stiffener torsional/flexural buckling (3-2-4/1.5.2), plate shear buckling stress (3-2-3/1.5.2), corrugated panels (3-2-4/1.7), extruded planking and sandwich panels (3-2-3/3), wheel-load decks (3-2-3/1.9), water jet and thruster tunnels (3-2-3/1.7), welded connections and end attachments (3-2-4/1.11), tripping brackets, rudders, hatches, appendages and machinery foundations are outside the scope of the calculation program.",
  "Direct analysis (3-1-3, 3-1-4) is not performed. Where the Rules require direct analysis of primary structure it is submitted separately.",
  "Graph-based Rule factors (FD, Kv, Fv, wet-deck F1, hull girder distribution factors) were supplied by the designer as direct values or digitised curves, are listed in the pressure sheets, and should be verified against the Rule figures.",
@@ -116,9 +127,21 @@ function buildReport(j,assets){
  // ---- 10 stiffeners
  h+=`<div class="sheet"><h2>10. Stiffener and frame calculations</h2>${(j.inputs.stiffeners||[]).map(s=>`<h3>${_e(s.id)}</h3><p class="small">${_e(s.profile)}; web ${s.hw_mm} x ${s.tw_mm} mm${s.bf_mm?`; flange ${s.bf_mm} x ${s.tf_mm} mm`:""}; attached plate ${s.t_plate_mm} mm; spacing ${s.spacing_mm} mm; span ${s.l_m} m; design-stress case ${_e(s.member_case)}.</p>`+_resTable(grp(s.id))).join("")||"<p>No stiffeners entered.</p>"}</div>`;
  // ---- 11 hull girder
- h+=`<div class="sheet"><h2>11. Longitudinal hull girder</h2>`+(hgr.length?(()=>{const g=j.inputs.hull_girder||{};return `<p>Section properties provided by the designer: section modulus at deck ${g.SM_deck_cm3} cm3, at bottom ${g.SM_bottom_cm3} cm3, moment of inertia ${g.I_cm4} cm4; the smaller modulus governs.</p>`+_resTable(hgr)})():"<p>Hull girder strength was not evaluated in this run.</p>")+`</div>`;
+ {const sec=j.section,hu=j.hull_girder_used||{};
+ const secHTML=sec?(()=>{const IN4=0.0240251,IN3=0.0610237;return `<h3>11.1 Midship section properties</h3>
+  <p class="small">Calculated about the horizontal neutral axis from the idealised section below (${sec.n_lines} plate, web and flange lines${sec.mirror?"; one side entered and mirrored about the centreline":""}). Coordinates: z measured up from the baseline, y from the centreline. Plate and stiffener areas are taken at full thickness; no reduction is made for plate buckling or shear lag (see 12.1).</p>
+  <table class="kv"><tr><td>Effective area</td><td class="n">${_n(sec.A_cm2,1)} cm2</td><td class="n">${_n(sec.A_cm2*0.155,2)} in2</td></tr>
+  <tr><td>Neutral axis above baseline</td><td class="n">${_n(sec.z_NA_mm,1)} mm</td><td class="n">${_n(sec.z_NA_mm*_MM_IN,2)} in</td></tr>
+  <tr><td>Strength deck above baseline</td><td class="n">${_n(sec.z_deck_mm,1)} mm</td><td class="n">${_n(sec.z_deck_mm*_MM_IN,2)} in</td></tr>
+  <tr><td>Moment of inertia I</td><td class="n">${_n(sec.I_cm4,0)} cm4</td><td class="n">${_n(sec.I_cm4*IN4,0)} in4</td></tr>
+  <tr><td>Section modulus at deck</td><td class="n">${_n(sec.SM_deck_cm3,0)} cm3</td><td class="n">${_n(sec.SM_deck_cm3*IN3,0)} in3</td></tr>
+  <tr><td>Section modulus at bottom</td><td class="n">${_n(sec.SM_bottom_cm3,0)} cm3</td><td class="n">${_n(sec.SM_bottom_cm3*IN3,0)} in3</td></tr></table>
+  <div class="fig">${sectionSVG(sec,{bg:"#fff",maxh:"95mm"})}<div class="small">Figure 11.1 - Idealised midship section. Blue: plating; orange: stiffener webs and flanges; grey dashed: members set to zero effectiveness. Line widths are drawn at actual thickness (minimum visible width applied).</div></div>
+  <table><tr><th>Member group</th><th>Area (cm2)</th><th>z centroid (mm)</th><th>Own I (cm4)</th><th>I about N.A. (cm4)</th></tr>${sec.rows.map(r=>`<tr><td>${_e(r.name)}</td><td class="n">${_n(r.A_cm2,1)}</td><td class="n">${_n(r.z_mm,1)}</td><td class="n">${_n(r.I_own_cm4,0)}</td><td class="n">${_n(r.I_total_cm4,0)}</td></tr>`).join("")}<tr><td><b>Total</b></td><td class="n"><b>${_n(sec.A_cm2,1)}</b></td><td class="n"><b>${_n(sec.z_NA_mm,1)}</b></td><td></td><td class="n"><b>${_n(sec.I_cm4,0)}</b></td></tr></table>
+  <p class="small">I = sum of (own inertia + A x (z - z<sub>NA</sub>)<sup>2</sup>) over all members; SM<sub>deck</sub> = I / (z<sub>deck</sub> - z<sub>NA</sub>); SM<sub>bottom</sub> = I / (z<sub>NA</sub> - z<sub>baseline</sub>).</p>`})():"";
+ h+=`<div class="sheet"><h2>11. Longitudinal hull girder</h2>`+(hgr.length?`<p>${hu.from_section?"Section properties taken from the midship section calculation in 11.1":"Section properties provided by the designer"}: section modulus at deck ${_n(hu.SM_deck_cm3,0)} cm3, at bottom ${_n(hu.SM_bottom_cm3,0)} cm3, moment of inertia ${_n(hu.I_cm4,0)} cm4; the smaller modulus governs.</p>`+_resTable(hgr):"<p>Hull girder strength was not evaluated in this run.</p>")+secHTML+`</div>`}
  // ---- 12 basis
  h+=`<div class="sheet"><h2>12. Basis, interpretations and limitations</h2><h3>12.1 Not evaluated in this report</h3><ul>${_LIMITS.map(x=>`<li>${_e(x)}</li>`).join("")}</ul><h3>12.2 Interpretation of Rule text</h3><ul>${_INTERP.map(x=>`<li>${_e(x)}</li>`).join("")}</ul><div class="box small">The calculation program is a design aid and has not been certified or approved by ABS or any other authority. The results are submitted for review by the reviewing body, who remain the judge of compliance. The designer is responsible for the input data and for items outside the scope listed above.</div></div>`;
  h+=`<div class="flow"><h2>13. Sign-off</h2><table class="sig"><tr><th></th><th>Name</th><th>Signature</th><th>Date</th></tr><tr><td>Drawn / prepared by</td><td>${_e(P.prepared_by)}</td><td></td><td></td></tr><tr><td>Checked by</td><td>${_e(P.checked_by)}</td><td></td><td></td></tr><tr><td>Approved by</td><td>${_e(P.approved_by||"")}</td><td></td><td></td></tr></table></div>`;
- h+=`<div class="sheet"><h2>Appendix A - Input data</h2><p class="small">Complete input file used for this run (reload with <i>Open JSON</i>).</p><pre>${_e(JSON.stringify(j.inputs,null,1))}</pre></div></body></html>`;
+ h+=`<div class="sheet"><h2>Appendix A - Input data</h2><p class="small">Complete input file used for this run (reload with <i>Open JSON</i>).</p><pre>${_e(JSON.stringify(j.inputs,(k,v)=>k==='segments'&&Array.isArray(v)&&v.length>20?'['+v.length+' line segments from the imported drawing, stored in the JSON file]':v,1))}</pre></div></body></html>`;
  return h}

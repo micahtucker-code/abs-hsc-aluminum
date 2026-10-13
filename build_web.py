@@ -39,6 +39,7 @@ api = """const API=(()=>{let py;
   py=pyodide.pyimport("abs_hsc_al.webapi");s.textContent="Ready (v__VER__, offline-capable)";return py})();
  const call=async(f,...a)=>{const p=await ready;return JSON.parse(p[f](...a))};
  return {run:d=>call("run_json",JSON.stringify(d)),alloy:(a,t)=>call("alloy_json",a,String(t)),
+  dxf:(t,pl,u,y0,z0)=>call("dxf_json",t,pl,u,String(y0),String(z0)),section:d=>call("section_json",JSON.stringify(d)),
   example:async()=>(await fetch("example.json?v=__VER__")).json(),ready}})();
 document.addEventListener("DOMContentLoaded",()=>{});""".replace("__VER__", __version__)
 footer = (f"Version {__version__} (built {datetime.date.today()}). Runs entirely in your browser; no vessel data is uploaded. "

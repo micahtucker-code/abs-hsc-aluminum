@@ -12,6 +12,7 @@ from .materials import AluminumMaterial
 from .plating import check_plate, check_plate_buckling, PlateResult
 from .stiffeners import Section, effective_plate_width, check_stiffener
 from .hullgirder import check_hull_girder
+from . import section as SEC
 
 
 def resolve_pressure_detail(spec, v: P.Vessel, fac: Factors, stations=None):
@@ -143,10 +144,20 @@ def run(data: dict) -> dict:
         results += check_stiffener(st["id"], mat, st["member_case"], p, st["spacing_mm"] / 1000.0, st["l_m"], sec,
                                    st.get("deck", False), st.get("bottom_primary", False),
                                    st.get("no_end_attach_wt", False), st.get("sigma_compr"))
-    if "hull_girder" in data:
-        h = data["hull_girder"]
+    section = None
+    hull_used = None
+    if data.get("section"):
+        section = SEC.compute(data["section"])
+    if "hull_girder" in data or section:
+        h = dict(data.get("hull_girder", {}))
+        if section and not all(k in h for k in ("SM_deck_cm3", "SM_bottom_cm3", "I_cm4")):
+            h.setdefault("SM_deck_cm3", section["SM_deck_cm3"])
+            h.setdefault("SM_bottom_cm3", section["SM_bottom_cm3"])
+            h.setdefault("I_cm4", section["I_cm4"])
+            h["from_section"] = True
         results += check_hull_girder(v, mat, h["SM_deck_cm3"], h["SM_bottom_cm3"], h["I_cm4"],
                                      h.get("Cb"), h.get("Mswh_kNm"), h.get("Msws_kNm"))
+        hull_used = h
     return {"vessel": vd, "ncg": P.ncg(v), "material": {"name": mat.name, "sigma_y_design": mat.sigma_y_design,
             "Q": mat.Q, "q_a": mat.q_a, "source": mat.source,
             "sigma_y_unwelded": mat.sigma_y_unwelded, "sigma_u_unwelded": mat.sigma_u_unwelded,
@@ -156,6 +167,7 @@ def run(data: dict) -> dict:
                         "ncg_formula": P.ncg_formula(v), "ncg_used": P.ncg(v), "ncg_override": v.ncg_override},
             "version": __version__,
             "station_table": station_table(data, v, stns, fac),
+            "section": section, "hull_girder_used": hull_used,
             "operating_limits": operating_limits(v),
             "results": [dict(asdict(r), utilisation=r.utilisation, passed=r.passed) for r in results]}
 
