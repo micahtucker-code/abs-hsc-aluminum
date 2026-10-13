@@ -1,4 +1,25 @@
 {
+ "project": {
+  "project": "Vessel Structural Calculations and Report",
+  "vessel_name": "EXAMPLE (illustrative data)",
+  "hull_no": "001",
+  "document_no": "CALC-001",
+  "revision": "A",
+  "company": "Tucker Marine",
+  "prepared_by": "",
+  "checked_by": "",
+  "submitted_to": "ABS",
+  "notation": "A1 HSC",
+  "notes": "Illustrative input only.",
+  "official_no": "0000000",
+  "vessel_type": "24 m Aluminum Patrol Craft (example)",
+  "department": "Hull & Structural Design",
+  "address": "123 Example St, Anytown",
+  "route": "Example Bay and approaches",
+  "route_designation": "Coastal service (illustrative)",
+  "scope": "Example data only.",
+  "references": "ABS Rules for Building and Classing High Speed Craft, July 2022; ABS Rules for Materials and Welding, July 2022"
+ },
  "vessel": {
   "L": 24.0,
   "Lw": 22.5,

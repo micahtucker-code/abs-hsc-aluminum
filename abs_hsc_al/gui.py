@@ -21,7 +21,8 @@ _SERVER_API = """const API={
  async alloy(a,t){const r=await fetch("/alloy?alloy="+encodeURIComponent(a)+"&t="+t);return {ok:r.ok,data:await r.json()}},
  async example(){return (await fetch("/example")).json()}};"""
 PAGE = (open(os.path.join(HERE, "gui_page.html"), encoding="utf-8").read()
-        .replace("/*__API__*/", _SERVER_API).replace("__FOOTER__", "Local version. Supports a designer's check; not an ABS approval."))
+        .replace("/*__API__*/", _SERVER_API)
+        .replace("/*__REPORT__*/", open(os.path.join(HERE, "report_view.js"), encoding="utf-8").read()).replace("__FOOTER__", "Local version. Supports a designer's check; not an ABS approval."))
 
 
 def _meta() -> dict:

@@ -4,7 +4,7 @@
 <style>
 :root{--bg:#f6f7f9;--card:#fff;--ink:#1b2430;--mute:#667085;--line:#d9dee5;--acc:#1f5fbf;--ok:#16794c;--bad:#b42318;--okbg:#e7f6ee;--badbg:#fdecea}
 @media (prefers-color-scheme:dark){:root{--bg:#12161c;--card:#1a2029;--ink:#e6eaf0;--mute:#98a2b3;--line:#2c3542;--acc:#6ea4ff;--ok:#5fd09b;--bad:#ff8a80;--okbg:#14301f;--badbg:#3a1a18}}
-*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.4 system-ui,sans-serif}
+*{box-sizing:border-box}[hidden]{display:none!important}body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.4 system-ui,sans-serif}
 header{padding:14px 24px;border-bottom:1px solid var(--line);background:var(--card);display:flex;gap:12px;align-items:center;flex-wrap:wrap}
 header h1{font-size:17px;margin:0;flex:1}
 main{max-width:1100px;margin:0 auto;padding:16px 24px 60px}
@@ -32,16 +32,19 @@ td.n{text-align:right;font-variant-numeric:tabular-nums}
 <button onclick="saveJSON()">Save JSON</button>
 <button class="p" onclick="runCheck()">Run checks</button></header>
 <main>
-<section id="res" hidden><h2>Results</h2><div id="out"></div><p><button onclick="dlMd()">Download report (Markdown)</button></p></section>
+<section id="res" hidden><h2>Results</h2><div id="out"></div><p><button class="p" onclick="openReport()">Create printable report…</button> <button onclick="dlMd()">Download summary (Markdown)</button></p></section>
+<section><h2>Project information (for the printed report)</h2><p class="hint">Appears on the report title block and sign-off page.</p><div class="grid" id="project"></div><div class="grid" style="margin-top:8px"><label>Company logo (optional, not saved in JSON)<input type="file" accept="image/*" onchange="loadAsset(this,'logo')"></label><label>Vessel image for cover (optional)<input type="file" accept="image/*" onchange="loadAsset(this,'vessel')"></label><label>Client / owner logo (optional)<input type="file" accept="image/*" onchange="loadAsset(this,'client')"></label></div></section>
 <section><h2>Vessel</h2><p class="hint">Units: m, tonnes, knots, degrees. Leave blank to use the default.</p><div class="grid" id="vessel"></div></section>
 <section><h2>Aluminum material</h2><p class="hint">Take the four strengths (N/mm²) for your alloy/temper from ABS Part 2, Ch.5, Sec.5 (2-5-5). The library below fills them from 2-5-5 (unwelded) and 2-4-5 Table 2 (as-welded); you can still type your own. The example file's values are illustrative only.</p><div class="grid"><label>Library alloy<select id="alloy"></select></label><label>Plate/extrusion thickness (mm)<input id="alt" type="number" value="8"></label><label>&nbsp;<button onclick="fillAlloy()">Fill from ABS tables</button></label></div><div class="grid" id="mat" style="margin-top:8px"></div><p class="hint" id="amsg"></p></section>
 <section><h2>Plating</h2><p class="hint">Each load case is checked for thickness; secondary-stiffening and minimum thickness are added automatically.</p><div id="plates"></div><button onclick="addPlate()">+ Plate panel</button></section>
 <section><h2>Stiffeners and girders</h2><div id="stiffs"></div><button onclick="addStiff()">+ Stiffener / girder</button></section>
 <section><h2>Hull girder (midship section)</h2><p class="hint">Provide your calculated section properties, or leave all three blank to skip.</p><div class="grid" id="hg"></div></section>
 <p class="hint" style="margin-top:24px">__FOOTER__</p></main>
+<div id="rv" hidden style="position:fixed;inset:0;background:var(--bg);z-index:10;display:flex;flex-direction:column"><div style="padding:8px 16px;border-bottom:1px solid var(--line);background:var(--card);display:flex;gap:8px;align-items:center"><b style="flex:1">Calculation report preview</b><button class="p" onclick="printReport()">Print / Save as PDF</button><button onclick="dlReportHtml()">Download HTML</button><button onclick="closeReport()">Close</button></div><iframe id="rvf" style="flex:1;border:0;background:#fff"></iframe></div>
 <script>
 const META=__META__;
 /*__API__*/
+/*__REPORT__*/
 const $=id=>document.getElementById(id);
 const VESSEL=[["L","Scantling length L (m)"],["Lw","Waterline length Lw (m)"],["B","Breadth B (m)"],["Bw","Max WL beam, one hull Bw (m)"],["D","Depth D (m)"],["d","Draft d (m)"],["delta_t","Displacement (tonnes)"],["V","Speed V (kn)"],["tau","Trim τ (deg)"],["beta_cg","Deadrise at LCG (deg)"],["n_hulls","Number of hulls"],["Cb","Block coeff. Cb (opt.)"],["B_cl","Hull CL spacing (m)"],["ncg_override","ncg override (g)"]];
 const REQ=["L","Lw","B","Bw","D","d","delta_t","V"];
@@ -65,6 +68,9 @@ const fld=(k,l,t,v)=>`<label>${l}<input data-k="${k}" type="${t||"number"}" step
 $("vessel").innerHTML=VESSEL.map(([k,l])=>fld(k,l)).join("")+`<label>Service<select data-k="service">${opts(["high-speed","coastal","riverine","crewboat"])}</select></label><label>Search & rescue<input type="checkbox" data-k="search_and_rescue"></label>`;
 $("mat").innerHTML=MAT.map(([k,l,t])=>fld(k,l,t)).join("");
 $("alloy").innerHTML=opts(META.alloys.map(x=>x));
+const PROJ=[["project","Name of drawing / report title","text"],["document_no","Drawing / document no.","text"],["revision","Revision","text"],["date","Date","date"],["official_no","Official no.","text"],["vessel_name","Vessel name","text"],["vessel_type","Vessel type","text"],["company","Company","text"],["address","Company address","text"],["department","Department","text"],["prepared_by","Drawn by","text"],["checked_by","Checked by","text"],["approved_by","Approved by","text"],["submitted_to","Submitted to (ABS / USCG / other)","text"],["notation","Notation / rules statement (cover note)","text"],["rev_description","Revision description","text"],["route","Proposed route","text"],["route_designation","Route designation / service","text"],["scope","Design scope (general note 2)","text"],["drawing_ref","Structural drawing reference","text"],["references","References (separate with ;)","text"],["notes","Additional note","text"]];
+let ASSETS={};
+$("project").innerHTML=PROJ.map(([k,l,t])=>fld(k,l,t,k==="date"?new Date().toISOString().slice(0,10):"")).join("");
 $("hg").innerHTML=HG.map(([k,l])=>fld(k,l)).join("");
 function pressureHTML(p){p=p||{};const c=p.calc||"bottom_slam_cg";
  return `<div class="pr"><div class="grid"><label>Pressure<select data-k="calc" onchange="rebuildP(this)">${opts(Object.keys(PCALC),c)}</select></label>${pfields(c,p)}</div></div>`}
@@ -86,7 +92,8 @@ function collect(){
  const missing=REQ.filter(k=>vessel[k]===undefined);if(missing.length)throw new Error("Vessel inputs required: "+missing.join(", "));
  vessel.n_hulls=vessel.n_hulls??1;
  const material={};$("mat").querySelectorAll("[data-k]").forEach(i=>{if(i.value!=="")material[i.dataset.k]=i.type==="number"?+i.value:i.value});
- const data={vessel,material,plates:[],stiffeners:[]};
+ const project={};$("project").querySelectorAll("[data-k]").forEach(i=>{if(i.value!=="")project[i.dataset.k]=i.value});
+ const data={project,vessel,material,plates:[],stiffeners:[]};
  document.querySelectorAll(".plate").forEach(e=>{const g=k=>e.querySelector(`.grid [data-k=${k}]`);const loads={};
   e.querySelectorAll(".load").forEach(l=>{loads[l.querySelector("[data-k=case]").value]=readP(l.querySelector(".pr"))});
   data.plates.push({id:g("id").value,location:g("location").value,s_mm:+g("s_mm").value,l_mm:+g("l_mm").value,t_mm:+g("t_mm").value,outside_midship_0_4L:g("outside").checked,loads})});
@@ -95,22 +102,27 @@ function collect(){
  if(Object.keys(hg).length){if(!("SM_deck_cm3"in hg&&"SM_bottom_cm3"in hg&&"I_cm4"in hg))throw new Error("Hull girder needs SM deck, SM bottom and I (or leave all blank).");data.hull_girder=hg}
  return data}
 function setVals(root,d){root.querySelectorAll("[data-k]").forEach(i=>{const v=d[i.dataset.k];if(v===undefined)return;if(i.type==="checkbox")i.checked=!!v;else i.value=v})}
-function populate(d){setVals($("vessel"),d.vessel||{});setVals($("mat"),d.material||{});$("plates").innerHTML="";$("stiffs").innerHTML="";(d.plates||[]).forEach(addPlate);(d.stiffeners||[]).forEach(addStiff);setVals($("hg"),d.hull_girder||{})}
+function populate(d){setVals($("project"),d.project||{});setVals($("vessel"),d.vessel||{});setVals($("mat"),d.material||{});$("plates").innerHTML="";$("stiffs").innerHTML="";(d.plates||[]).forEach(addPlate);(d.stiffeners||[]).forEach(addStiff);setVals($("hg"),d.hull_girder||{})}
 async function fillAlloy(){const {ok,data:j}=await API.alloy($("alloy").value,$("alt").value);
  if(!ok){$("amsg").textContent=j.error;return}$("amsg").textContent="Source: "+j.source;setVals($("mat"),j)}
 async function loadExample(){populate(await API.example())}
 function openFile(inp){const r=new FileReader();r.onload=()=>{try{populate(JSON.parse(r.result))}catch(e){alert("Could not read file: "+e)}};r.readAsText(inp.files[0])}
 function dl(name,text,type){const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([text],{type}));a.download=name;a.click()}
 function saveJSON(){try{dl("vessel.json",JSON.stringify(collect(),null,2),"application/json")}catch(e){alert(e.message)}}
-let MD="";function dlMd(){dl("report.md",MD,"text/markdown")}
+let MD="",LAST=null;function dlMd(){dl("report.md",MD,"text/markdown")}
 const fmt=x=>x>=100?x.toFixed(0):x>=10?x.toFixed(1):x.toFixed(2);
 async function runCheck(){const box=$("res"),out=$("out");box.hidden=false;
  let data;try{data=collect()}catch(e){out.innerHTML=`<div class="warn">${e.message}</div>`;return}
  out.innerHTML='<p class="hint">Running…</p>';const {ok,data:j}=await API.run(data);
  if(!ok){out.innerHTML=`<div class="warn">${j.error}</div>`;return}
- MD=j.markdown;const fails=j.results.filter(x=>!x.passed).length;
+ LAST=j;MD=j.markdown;const fails=j.results.filter(x=>!x.passed).length;
  out.innerHTML=`<div class="sum">${j.results.length-fails} of ${j.results.length} checks pass`+(fails?` – <span style="color:var(--bad)">${fails} fail</span>`:"")+`</div><p class="hint">ncg = ${j.ncg.toFixed(2)} g · σy design ${j.material.sigma_y_design.toFixed(1)} N/mm² · Q = ${j.material.Q.toFixed(3)}</p><table><tr><th>Item</th><th>Check</th><th>Clause</th><th>Required</th><th>Provided</th><th>Utilisation</th><th></th></tr>`+
  j.results.map(x=>`<tr><td>${x.id}</td><td>${x.kind}</td><td>${x.clause}</td><td class="n">${fmt(x.required)} ${x.unit}</td><td class="n">${fmt(x.provided)}</td><td><div class="bar"><i style="width:${Math.min(100,x.utilisation*100)}%;background:${x.passed?"var(--ok)":"var(--bad)"}"></i></div> ${x.utilisation.toFixed(2)}</td><td><span class="${x.passed?"pass":"fail"}">${x.passed?"PASS":"FAIL"}</span></td></tr>`).join("")+"</table>";
  box.scrollIntoView({behavior:"smooth"})}
+function loadAsset(inp,k){const f=inp.files[0];if(!f){delete ASSETS[k];return}const r=new FileReader();r.onload=()=>{ASSETS[k]=r.result};r.readAsDataURL(f)}
+function openReport(){if(!LAST)return;$("rvf").srcdoc=buildReport(LAST,ASSETS);$("rv").hidden=false}
+function closeReport(){$("rv").hidden=true}
+function printReport(){const w=$("rvf").contentWindow;w.focus();w.print()}
+function dlReportHtml(){const n=((LAST.project||{}).project||"calculation").replace(/[^A-Za-z0-9_-]+/g,"_");dl(n+"_report.html",buildReport(LAST,ASSETS),"text/html")}
 addPlate();
 </script></body></html>

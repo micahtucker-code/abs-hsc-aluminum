@@ -8,6 +8,8 @@ High Speed Craft (July 2022), Part 3, Chapter 2. Pure Python 3, no dependencies.
 
 **GUI:** `python -m abs_hsc_al.gui` opens a form in your browser (local only, nothing leaves your machine). Enter vessel, alloy, plates, stiffeners and midship section properties, press *Run checks*, and download the report. *Save JSON* / *Open JSON* exchange files with the command line tool.
 
+**Printed report:** after *Run checks*, press *Create printable report* (web or local GUI), then *Print / Save as PDF* (or *Download HTML*). The report follows the layout of a submitted calculation set: title-block cover with official/drawing/revision numbers, running page header, summary sheets, calculation sheets showing each equation with the numbers substituted, PASS/FAIL with margin, speed-vs-wave-height table, sign-off and the input data. Fill in the *Project information* section first; logos and a cover image can be attached there.
+
 Exit code is 0 when every check passes, 1 otherwise.
 
 ## What it checks

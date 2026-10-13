@@ -43,7 +43,7 @@ api = """const API=(()=>{let py;
 document.addEventListener("DOMContentLoaded",()=>{});""".replace("__VER__", __version__)
 footer = (f"Version {__version__} (built {datetime.date.today()}). Runs entirely in your browser; no vessel data is uploaded. "
           "Supports a designer's check; not an ABS approval.")
-page = (page.replace("__META__", json.dumps(_meta())).replace("/*__API__*/", api).replace("__FOOTER__", footer)
+page = (page.replace("__META__", json.dumps(_meta())).replace("/*__API__*/", api).replace("/*__REPORT__*/", open(os.path.join(HERE, "report_view.js"), encoding="utf-8").read()).replace("__FOOTER__", footer)
         .replace("<header>", '<script src="pyodide/pyodide.js"></script>\n<header>', 1)
         .replace('<button class="p" onclick="runCheck()">Run checks</button></header>',
                  '<span id="status" class="hint" style="margin:0">Loading calculation engine…</span><button class="p" onclick="runCheck()">Run checks</button></header>'))

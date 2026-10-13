@@ -136,10 +136,19 @@ def check_hull_girder(v: P.Vessel, mat: AluminumMaterial, SM_prov_deck: float, S
         sm2, m = SM_1_1_2e(v, cb, mat, Mswh, Msws)
         detail.update(m)
         res.append(PlateResult("hull girder", "section modulus 0.4L (1.1.2e)", "3-2-1/1.1.2(e)", sm2,
-                               min(SM_prov_deck, SM_prov_bottom), "cm2-m", m))
+                               min(SM_prov_deck, SM_prov_bottom), "cm2-m", m,
+                               formula="SM = Mt C Q / fp, Mt = greatest of (Mswh + Mwh), (Msws + Mws), Msl;  fp = 17.5 kN/cm2",
+                               working=f"Mws = {m['Mws']:.0f}, Mwh = {m['Mwh']:.0f}, Mswh = {m['Mswh']:.0f}, Msws = {m['Msws']:.0f}, "
+                                       f"Msl = {m['Msl']:.0f} kN-m;  Mt = {m['Mt']:.0f};  SM = {sm2:.1f} cm2-m"))
         governing = max(SM_req, sm2)
     res.insert(0, PlateResult("hull girder", "section modulus (1.1.1)", "3-2-1/1.1.1", SM_req,
-                              min(SM_prov_deck, SM_prov_bottom), "cm2-m", detail))
+                              min(SM_prov_deck, SM_prov_bottom), "cm2-m", detail,
+                              formula="SM = C1 C2 L^2 B (Cb + 0.7) K3 C Q  [cm2-m];  C2 = 0.01, C = 0.90 (aluminum)",
+                              working=f"C1 = {detail['C1']:.3f}, L = {v.L:g}, B = {v.B:g}, Cb = {detail['Cb_used']:.3f}, K3 = {detail['K3']:.3f}, "
+                                      f"Q = {mat.Q:.3f};  SM = {SM_req:.1f} cm2-m (= {SM_req * 100:.0f} cm3)"))
     res.append(PlateResult("hull girder", "moment of inertia", "3-2-1/1.5",
-                           I_required(v.L, governing, mat), I_prov, "cm2-m2", {"SM_governing": governing}))
+                           I_required(v.L, governing, mat), I_prov, "cm2-m2", {"SM_governing": governing},
+                           formula="I = (L / (Q C)) (SM / K)  [cm2-m2];  K = 13.33 (L <= 61 m) / 11.1 (L > 61 m), aluminum",
+                           working=f"L = {v.L:g}, Q = {mat.Q:.3f}, C = 0.9, SM = {governing:.1f};  I = {I_required(v.L, governing, mat):.1f} cm2-m2 "
+                                   f"(= {I_required(v.L, governing, mat) * 1e4:.3g} cm4)"))
     return res

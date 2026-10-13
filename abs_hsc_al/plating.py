@@ -112,6 +112,8 @@ class PlateResult:
     provided: float
     unit: str = "mm"
     detail: dict = field(default_factory=dict)
+    formula: str = ""  # Rule equation as printed
+    working: str = ""  # same equation with this item's numbers substituted
 
     @property
     def utilisation(self) -> float:
@@ -138,11 +140,22 @@ def check_plate(
     for case, p in loads.items():
         sa = design_stress(mat, case, outside_midship_0_4L)
         req = required_thickness_lateral(p, s_mm, l_mm, sa)
+        k = k_factor(l_mm / s_mm)
         out.append(PlateResult(pid, f"lateral ({case})", "3-2-3/1.3.1", req, t_mm,
-                               detail={"p": p, "sigma_a": sa, "k": k_factor(l_mm / s_mm), "s": s_mm}))
-    out.append(PlateResult(pid, "secondary stiffening", "3-2-3/1.3.2", 0.012 * s_mm, t_mm, detail={"s": s_mm}))
+                               detail={"p": p, "sigma_a": sa, "k": k, "s": s_mm},
+                               formula="t = s * sqrt(p k / (1000 sigma_a))  [mm]; k from TABLE 1; sigma_a from TABLE 2",
+                               working=f"s = {s_mm:g} mm, l/s = {l_mm / s_mm:.2f}, k = {k:.3f}, p = {p:.2f} kN/m2, "
+                                       f"sigma_a = {DESIGN_STRESS_FACTOR[case]:g} x {sa / DESIGN_STRESS_FACTOR[case]:.1f}"
+                                       f" = {sa:.1f} N/mm2;  t = {req:.2f} mm"))
+    out.append(PlateResult(pid, "secondary stiffening", "3-2-3/1.3.2", 0.012 * s_mm, t_mm, detail={"s": s_mm},
+                           formula="t_al = 0.012 s  [mm]", working=f"0.012 x {s_mm:g} = {0.012 * s_mm:.2f} mm"))
+    a, b, fl = MIN_THICKNESS[location]
+    tmin_raw = a * math.sqrt(L * mat.q_a) + b
     out.append(PlateResult(pid, "minimum thickness", "3-2-3/1.3.3", min_thickness(L, mat, location), t_mm,
-                           detail={"location": location, "qa": mat.q_a}))
+                           detail={"location": location, "qa": mat.q_a},
+                           formula=f"t_al = {a:g} sqrt(L qa) + {b:g}, not less than {fl:g} mm  ({location})",
+                           working=f"L = {L:g} m, qa = 115/sigma_ya = {mat.q_a:.3f};  {a:g} x sqrt({L:g} x {mat.q_a:.3f}) + {b:g}"
+                                   f" = {tmin_raw:.2f} mm; floor {fl:g} mm"))
     return out
 
 
@@ -156,4 +169,7 @@ def check_plate_buckling(
     sE = 0.9 * m1 * E_ALUMINUM * (t_mm / s_mm) ** 2
     sc = critical_buckling(sE, mat.sigma_y_unwelded)
     return PlateResult(pid, "buckling (uniaxial)", "3-2-3/1.5.1", sigma_work, sc, "N/mm2",
-                       {"m1": m1, "sigma_E": sE, "sigma_c": sc})
+                       {"m1": m1, "sigma_E": sE, "sigma_c": sc},
+                       formula="sigma_E = 0.9 m1 E (t/s)^2; sigma_c = sigma_E (<= 0.5 sigma_y) else sigma_y (1 - sigma_y/(4 sigma_E)); need sigma_c >= sigma_a",
+                       working=f"m1 = {m1:.2f}, E = {E_ALUMINUM:g}, t/s = {t_mm:g}/{s_mm:g}, sigma_E = {sE:.1f}, "
+                               f"sigma_y = {mat.sigma_y_unwelded:g};  sigma_c = {sc:.1f} N/mm2 vs sigma_a = {sigma_work:g}")

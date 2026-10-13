@@ -145,22 +145,38 @@ def check_stiffener(
     sa = sigma_a(mat, member_case)
     res: list[PlateResult] = []
     res.append(PlateResult(mid, "section modulus", "3-2-4/1.3.1", required_SM(p, s_m, l_m, sa, no_end_attach_wt),
-                           props["SM_cm3"], "cm3", {"sigma_a": sa, "p": p, "s": s_m, "l": l_m}))
+                           props["SM_cm3"], "cm3", {"sigma_a": sa, "p": p, "s": s_m, "l": l_m},
+                           formula="SM = 83.3 p s l^2 / sigma_a  [cm3]  (x1.5 for WT bulkhead stiffener without end attachments); sigma_a from TABLE 1",
+                           working=f"p = {p:.2f} kN/m2, s = {s_m:g} m, l = {l_m:g} m, sigma_a = {SIGMA_A_FACTOR[member_case]:g} x "
+                                   f"{mat.sigma_y_design:.1f} = {sa:.1f} N/mm2;  SM = {required_SM(p, s_m, l_m, sa, no_end_attach_wt):.1f} cm3. "
+                                   f"Section (with {sec.b_eff:.0f} mm plate): A = {props['A_cm2']:.2f} cm2, NA {props['yb_mm']:.1f} mm above plate underside, "
+                                   f"I = {props['I_cm4']:.1f} cm4, SM = {props['SM_cm3']:.1f} cm3 (smaller of plate/flange side)"))
     res.append(PlateResult(mid, "moment of inertia", "3-2-4/1.3.2", required_I(p, s_m, l_m, deck),
-                           props["I_cm4"], "cm4", {"K4": K4_DECK if deck else K4_SHELL}))
+                           props["I_cm4"], "cm4", {"K4": K4_DECK if deck else K4_SHELL},
+                           formula="I = 260 p s l^3 / (K4 E)  [cm4]",
+                           working=f"K4 = {K4_DECK if deck else K4_SHELL:g}, E = {E_ALUMINUM:g};  I = {required_I(p, s_m, l_m, deck):.1f} cm4"))
     tw_req, t1, t2 = required_web_thickness(sec.hw, p, s_m, l_m, mat, bottom_primary)
     res.append(PlateResult(mid, "web thickness", "3-2-4/1.9.1", tw_req, sec.tw, "mm",
-                           {"proportion": t1, "shear": t2}))
+                           {"proportion": t1, "shear": t2},
+                           formula="t >= dw/50 sqrt(sigma_y/127.6)  and  t >= 1000 p s l / (2 dw tau_a);  tau_a = 0.5 tau_yw (0.75 bottom primary)",
+                           working=f"dw = {sec.hw:g} mm, sigma_y = {mat.sigma_y_unwelded:g} (unwelded): {t1:.2f} mm;  "
+                                   f"tau_yw = {mat.tau_yw:.1f}: {t2:.2f} mm;  governing {tw_req:.2f} mm"))
     lim = proportion_limit(sec.profile, mat, sigma_compr)
     ratio = sec.hw / sec.tw
     # reported as ratio vs limit: 'required' = actual dw/tw, 'provided' = limit
-    res.append(PlateResult(mid, "web proportion dw/tw", "3-2-4/1.5.6", ratio, lim, "-", {}))
+    res.append(PlateResult(mid, "web proportion dw/tw", "3-2-4/1.5.6", ratio, lim, "-", {},
+                           formula="Limit check: dw/tw <= coef x sqrt(E/sigma_y) x C2 (coef 0.5 flat bar, 1.5 tee/angle, 0.85 bulb). Column 'Required' = actual ratio, 'Provided' = limit",
+                           working=f"dw/tw = {sec.hw:g}/{sec.tw:g} = {ratio:.1f};  limit = {lim:.1f}"))
     if sec.profile in ("tee", "angle") and sec.bf > 0 and sec.tf > 0:
         flim = proportion_limit("tee", mat, sigma_compr) / 3.0  # outstanding flange: 0.5 vs 1.5 coefficient
         res.append(PlateResult(mid, "flange outstand proportion", "3-2-4/1.5.6(d)",
-                               (sec.bf / 2 if sec.profile == "tee" else sec.bf) / sec.tf, flim, "-", {}))
+                               (sec.bf / 2 if sec.profile == "tee" else sec.bf) / sec.tf, flim, "-", {},
+                               formula="Limit check: outstand/tf <= 0.5 sqrt(E/sigma_y) C2. 'Required' = actual ratio, 'Provided' = limit",
+                               working=f"outstand/tf = {(sec.bf / 2 if sec.profile == 'tee' else sec.bf):g}/{sec.tf:g};  limit = {flim:.1f}"))
     if sigma_compr is not None:
         sc = column_buckling(mat, props["I_cm4"], props["A_cm2"], l_m)
         res.append(PlateResult(mid, "column buckling (1.2 x working)", "3-2-4/1.5.1,1.5.5",
-                               1.2 * sigma_compr, sc, "N/mm2", {}))
+                               1.2 * sigma_compr, sc, "N/mm2", {},
+                               formula="sigma_E = E Ia / (1000 A l^2); sigma_c per 1.5.3; need sigma_c >= 1.2 sigma_a",
+                               working=f"Ia = {props['I_cm4']:.1f} cm4, A = {props['A_cm2']:.2f} cm2, l = {l_m:g} m;  sigma_c = {sc:.1f} N/mm2 vs 1.2 x {sigma_compr:g}"))
     return res

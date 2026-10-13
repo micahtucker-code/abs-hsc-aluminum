@@ -142,6 +142,27 @@ class Pressures(unittest.TestCase):
         c = Curve([0, 1], [0, 10]); self.assertEqual(c(0.5), 5); self.assertEqual(c(2), 10)
 
 
+class OperatingLimits(unittest.TestCase):
+    def test_speed_reduces_with_wave_height_at_constant_ncg(self):
+        from abs_hsc_al.report import operating_limits
+        v = P.Vessel(L=24, Lw=22.5, B=6, Bw=5.2, D=3, d=1.1, delta_t=60, V=30, service="coastal")
+        ol = {o["h13"]: o["V"] for o in operating_limits(v)}
+        self.assertEqual(ol[1.0], 30)                       # below design h1/3: capped at design speed
+        self.assertAlmostEqual(ol[2.5], 30)                 # at design h1/3
+        k0, k4 = 12 * 2.5 / 5.2 + 1, 12 * 4.0 / 5.2 + 1
+        self.assertAlmostEqual(ol[4.0], 30 * math.sqrt(k0 / k4))
+        # acceleration at (h=4, V=ol) equals design acceleration
+        v2 = P.Vessel(L=24, Lw=22.5, B=6, Bw=5.2, D=3, d=1.1, delta_t=60, V=ol[4.0], service="high-speed")
+        raw = lambda x: P.N2 * (12 * x.h13 / x.NhBw + 1) * x.tau * (50 - x.beta_cg) * x.V ** 2 * x.NhBw ** 2 / x.delta_kg
+        self.assertAlmostEqual(raw(v2), raw(v), places=6)            # uncapped acceleration held constant
+        self.assertLessEqual(P.ncg_formula(v2), P.ncg_formula(v) + 1e-9)  # and the speed-based cap only falls with V
+
+    def test_override_gives_no_table(self):
+        from abs_hsc_al.report import operating_limits
+        v = P.Vessel(L=24, Lw=22.5, B=6, Bw=5.2, D=3, d=1.1, delta_t=60, V=30, ncg_override=2.0)
+        self.assertEqual(operating_limits(v), [])
+
+
 class Alloys(unittest.TestCase):
     def test_lookup_5083_h116(self):
         from abs_hsc_al.alloys import lookup
