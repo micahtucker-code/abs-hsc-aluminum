@@ -1,6 +1,7 @@
 """Midship section properties (vertical bending) from a thin-walled idealisation.
 
-Geometry is in mm in a section plane: y horizontal (0 = centreline), z vertical (0 = baseline).
+Geometry is in mm (inches when units = "US") in a section plane: y horizontal (0 = centreline), z vertical (0 = baseline).
+Results are in cm2 / cm3 / cm4 (SI) or in2 / in3 / in4 (US); the result keys keep their `_cm2/_cm3/_cm4/_mm` names.
 Members:
   plate    a straight line from (y1,z1) to (y2,z2) with thickness t_mm; may carry a regular set of
            stiffeners (flat bar / tee / angle) expanded into web and flange lines
@@ -16,6 +17,8 @@ as negative lumps, and more than one alloy in the section.
 from __future__ import annotations
 
 import math
+
+from . import units as UN
 
 
 def _seg(y1, z1, y2, z2, t):
@@ -73,8 +76,9 @@ def _expand_stiffeners(m: dict, ref: tuple[float, float]) -> list[dict]:
     return out
 
 
-def compute(sec: dict) -> dict:
+def compute(sec: dict, units: str = "SI") -> dict:
     """sec: {"mirror": bool, "deck_z_mm": opt, "base_z_mm": opt, "members": [...], "dxf": {...}} -> results."""
+    U = UN.get(units)
     members = sec.get("members", [])
     dxf = sec.get("dxf")
     mirror = bool(sec.get("mirror", False))
@@ -160,7 +164,7 @@ def compute(sec: dict) -> dict:
     z_bot = float(sec["base_z_mm"]) if "base_z_mm" in sec else min(zs)
     z_deck = float(sec["deck_z_mm"]) if "deck_z_mm" in sec else max(zs)
     if not (z_bot < zna < z_deck):
-        raise ValueError(f"neutral axis ({zna:.1f} mm) lies outside baseline ({z_bot:.1f}) and deck ({z_deck:.1f})")
+        raise ValueError(f"neutral axis ({zna:.1f} {U.small}) lies outside baseline ({z_bot:.1f}) and deck ({z_deck:.1f})")
 
     groups: dict[str, dict] = {}
     for e in elems:
@@ -172,26 +176,27 @@ def compute(sec: dict) -> dict:
     for g in groups.values():
         zc = g["Az"] / g["A_mm2"] if g["A_mm2"] else 0.0
         dist = sum(e["A"] * (e["z"] - zna) ** 2 for e in elems if e["group"] == g["name"])
-        rows.append({"name": g["name"], "A_cm2": g["A_mm2"] / 100.0, "z_mm": zc,
-                     "I_own_cm4": g["I_own"] / 1e4, "I_total_cm4": (g["I_own"] + dist) / 1e4})
+        rows.append({"name": g["name"], "A_cm2": g["A_mm2"] / U.area_div, "z_mm": zc,
+                     "I_own_cm4": g["I_own"] / U.inertia_div, "I_total_cm4": (g["I_own"] + dist) / U.inertia_div})
     z_lev = float(sec["shear_level_z_mm"]) if "shear_level_z_mm" in sec else zna
-    shear = _shear_geometry(elems, lumps, mirror, z_lev, zna)
+    shear = _shear_geometry(elems, lumps, mirror, z_lev, zna, U)
     shear["web_area_cm2"] = sum(e["k"] * e["line"]["t"] * abs(e["line"]["z2"] - e["line"]["z1"])
                                 for e in elems if "line" in e and e["line"]["kind"] == "plate"
-                                and abs(e["line"]["z2"] - e["line"]["z1"]) > abs(e["line"]["y2"] - e["line"]["y1"])) / 100.0
+                                and abs(e["line"]["z2"] - e["line"]["z1"]) > abs(e["line"]["y2"] - e["line"]["y1"])) / U.area_div
     return {
         "shear": shear,
-        "A_cm2": A / 100.0, "z_NA_mm": zna, "I_cm4": I / 1e4,
+        "units": U.name,
+        "A_cm2": A / U.area_div, "z_NA_mm": zna, "I_cm4": I / U.inertia_div,
         "z_deck_mm": z_deck, "z_bottom_mm": z_bot,
-        "SM_deck_cm3": I / (z_deck - zna) / 1e3, "SM_bottom_cm3": I / (zna - z_bot) / 1e3,
+        "SM_deck_cm3": I / (z_deck - zna) / U.mod_div, "SM_bottom_cm3": I / (zna - z_bot) / U.mod_div,
         "mirror": mirror, "rows": rows, "geometry": geom, "lumps": lump_geom,
         "skipped_layers": skipped, "n_lines": len(allx), "n_stiffener_lines": len(allx) - len(lines),
         "bbox": [min(ys + [-y for y in ys] if mirror else ys), min(zs), max(ys + [-y for y in ys] if mirror else ys), max(zs)] if ys else [0, min(zs), 0, max(zs)],
     }
 
 
-def _shear_geometry(elems, lumps, mirror, z_lev, zna):
-    """First moment m (cm3) about the neutral axis of the effective area above the level z_lev, and the shear
+def _shear_geometry(elems, lumps, mirror, z_lev, zna, U=UN.SI):
+    """First moment m (cm3; in3 for US) about the neutral axis of the effective area above the level z_lev, and the shear
     webs (plate members that cross the level): count, total thickness, thinnest, any on the centreline."""
     m = 0.0
     webs_t = 0.0
@@ -218,5 +223,5 @@ def _shear_geometry(elems, lumps, mirror, z_lev, zna):
     for x in lumps:
         if x["z"] > z_lev:
             m += x["A"] * x["eff"] * (2.0 if (mirror and abs(x["y"]) > 1e-6) else 1.0) * (x["z"] - zna)
-    return {"z_level_mm": z_lev, "m_cm3": m / 1e3, "web_t_sum_mm": webs_t, "n_webs": n_webs,
+    return {"z_level_mm": z_lev, "m_cm3": m / U.mod_div, "web_t_sum_mm": webs_t, "n_webs": n_webs,
             "t_min_mm": t_min, "centreline_web": on_cl_web}

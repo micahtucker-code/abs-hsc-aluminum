@@ -61,3 +61,23 @@ The *Midship section properties* block computes area, neutral axis, I and the de
 - **Cross structure (3-2-1/3.5, 3-2-A2):** enter SMt and At, or supply a cross-structure `section` in the JSON file (SMt from its smaller modulus, At from its vertical web area), and optionally the connecting elements (x from the FP, span, I, SM, web area). Stresses are compared with 0.66, 0.75 and 0.38 of the unwelded yield.
 
 The cross structure block also has its own section editor (same members table and DXF import as the midship section, with x along the craft instead of y across it). Its smaller section modulus gives SMt and its vertical web area gives At; typing SMt or At overrides them. A sample drawing is in `inputs/example_crossdeck.dxf` (choose plane `xy`).
+
+
+## SI and US customary units (v0.8)
+
+Choose SI or US in the header selector (GUI/web), or set `"units": "US"` in the input JSON (default `"SI"`).
+Key names are unchanged; the `units` key decides how the numbers are read (the `_mm` / `_m` / `_t` suffixes then mean
+inches / feet / long tons). `abs_hsc_al.units.convert_inputs(data, "US")` converts a whole document either way, and the
+selector does this for you when you switch.
+
+US mode uses the Rule's printed US formulas and constants (N1 0.069, N2 0.0016, N3 0.44 psi/ft, kn 0.463, C1 = 0.0134L+3.75,
+fp 11.33 Ltf/in2, k 0.2797, C4 0.5, K1 0.255, K2 0.1275, E 10x10^6 psi, ...), which are rounded and are not exact conversions
+of the SI ones. Part 2 alloy properties are the SI values rounded to the nearest ksi. Native units: ft, in, psi, long tons
+(lb inside the pressure and cross-structure formulas), Ltf-ft, in2-ft and in2-ft2 for the hull girder. Where the Rule's US
+text is inconsistent or silent, the value is derived and flagged in the report (section 12.3):
+
+- 3-2-2/3.5.2 (wet deck, L >= 61 m): the Rule gives one constant (55) for all unit systems; for US it is converted (2.43 psi per ft/s).
+- 3-2-2/3.5 V1 for L >= 200 ft is printed as 16.4 h1/3/sqrt(L) + 3.28 ft/s; the SI expression 5 h1/3/sqrt(L) + 1 m/s converts to 9.06. 9.06 is used unless 'v1_printed_us' is set.
+- 3-2-2/3.3.3 (multi-hull fore-end pressure): the US line prints 0.28 where 3-2-2/1.3.3 prints 0.92; 0.92 is dimensionally consistent and is used.
+- 3-2-2/1.1.3 TABLE 2 (FD minimum): 500 mm is printed as 16.75 in. (19.7 in. by conversion); the printed value is used.
+- US constants rounded by the Rule (N1 0.069, qa 17000/sigma, 0.015/0.013/0.011 in minimum-thickness coefficients, C2 1.44e-4, k 0.2797 ...) do not convert exactly from the SI ones, so SI and US results for the same craft differ by a few percent.

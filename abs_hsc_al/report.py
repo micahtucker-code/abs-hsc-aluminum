@@ -15,6 +15,7 @@ from .hullgirder import check_hull_girder
 from . import section as SEC
 from . import shear as SH
 from . import hullgirder as HGM
+from . import units as UN
 
 
 def resolve_pressure_detail(spec, v: P.Vessel, fac: Factors, stations=None):
@@ -42,44 +43,46 @@ def resolve_pressure_detail(spec, v: P.Vessel, fac: Factors, stations=None):
         return val
     FD = lambda: F("FD", spec.get("AD_over_AR"))
     Kv = lambda: F("Kv", x)
-    base = f"N1 = 0.1, Delta = {v.delta_kg:.0f} kg, Lw = {v.Lw:g} m, Nh*Bw = {v.NhBw:g} m, ncg = {P.ncg(v):.2f} g"
+    U = v.U
+    lb, pu = U.big, U.p
+    base = f"N1 = {U.N1:g}, Delta = {v.delta_load:.0f} {U.disp_p}, Lw = {v.Lw:g} {lb}, Nh*Bw = {v.NhBw:g} {lb}, ncg = {P.ncg(v):.2f} g"
     if c == "bottom_slam_cg":
         p = P.bottom_slam_cg(v, FD())
         return p, used, "pbcg = N1 (Delta / (Lw Nh Bw)) (1 + ncg) FD  [" + base + "]", "3-2-2/1.1.1"
     if c == "bottom_slam_xx":
         Fv = spec.get("Fv")
-        if Fv is None and v.L < 61.0 and "Fv" in fac.curves:
+        if Fv is None and v.L < v.U.L61 and "Fv" in fac.curves:
             Fv = fac.resolve("Fv", x, None)
         if Fv is not None:
             used["Fv"] = Fv
         fd = FD()
         kv = Kv() if Fv is None else 1.0
         p = P.bottom_slam_xx(v, fd, kv, spec.get("beta_bx", v.beta_cg), Fv)
-        return p, used, ("pbxx = N1 (Delta/(Lw Nh Bw)) (1 + ncg) FD Fv  (L < 61 m)" if Fv is not None else
+        return p, used, ("pbxx = N1 (Delta/(Lw Nh Bw)) (1 + ncg) FD Fv  (L < " + f"{U.L61:g} {lb})" if Fv is not None else
                          "pbxx = N1 (Delta/(Lw Nh Bw)) (1 + nxx) ((70 - beta_bx)/(70 - beta_cg)) FD, nxx = ncg Kv") + f"  [{base}]", "3-2-2/1.1.1-1.1.2"
     if c == "hydro_bottom":
-        return P.hydro_bottom(v), used, f"pd = N3 (0.64 H + d), N3 = 9.8, H = 0.0172 L + 3.653 = {v.H:.3f} m, d = {v.d_min:g} m", "3-2-2/1.1.3"
+        return P.hydro_bottom(v), used, f"pd = N3 (0.64 H + d), N3 = {U.N3:g}, H = {U.H_a:g} L + {U.H_b:g} = {v.H:.3f} {lb}, d = {v.d_min:g} {lb}", "3-2-2/1.1.3"
     if c == "side_slam":
         p = P.side_slam(v, FD(), Kv(), spec["beta_sx"])
         return p, used, f"pss = N1 (Delta/(Lw Nh Bw)) (1 + nxx) ((70 - beta_sx)/(70 - beta_cg)) FD  [{base}, beta_sx = {spec['beta_sx']:g}]", "3-2-2/1.3.1"
     if c == "side_hydro":
-        return P.side_hydro(v, spec["y"], spec.get("forward_of_0125L", False)), used, f"ps = N3 (Hs - y), Hs = {P.Hs(v):.3f} m, y = {spec['y']:g} m, with stated minimum", "3-2-2/1.3.2"
+        return P.side_hydro(v, spec["y"], spec.get("forward_of_0125L", False)), used, f"ps = N3 (Hs - y), N3 = {U.N3:g}, Hs = {P.Hs(v):.3f} {lb}, y = {spec['y']:g} {lb}, with stated minimum", "3-2-2/1.3.2"
     if c == "side_fore_end":
         return (P.side_fore_end(v, spec["alpha"], spec["beta_entry"], spec.get("plating", True)), used,
-                f"psf = 0.28 Fa CF N3 (0.22 + 0.15 tan alpha)(0.4 V sin beta + 0.6 sqrt(L))^2, alpha = {spec['alpha']:g}, beta = {spec['beta_entry']:g}", "3-2-2/1.3.3")
+                f"psf = {U.fore_c:g} Fa CF N3 (0.22 + 0.15 tan alpha)(0.4 V sin beta + {U.fore_L:g} sqrt(L))^2, N3 = {U.N3:g}, alpha = {spec['alpha']:g}, beta = {spec['beta_entry']:g}", "3-2-2/1.3.3")
     if c == "deck":
-        return (P.deck_pressure(v, spec["kind"], spec.get("nxx", 0.0), spec.get("W", 0.0), spec.get("rho", 7.04), spec.get("h", 0.0)),
+        return (P.deck_pressure(v, spec["kind"], spec.get("nxx", 0.0), spec.get("W", 0.0), spec.get("rho"), spec.get("h", 0.0)),
                 used, f"Table 3, deck kind '{spec['kind']}'", "3-2-2/5")
     if c == "superstructure":
         return P.superstructure_pressure(v, spec["location"]), used, f"Table 4, '{spec['location']}', interpolated on L", "3-2-2/7"
     if c == "tank":
-        return (P.tank_pressure(spec["h"], spec["h2"], spec.get("nxx", 0.0), spec.get("rho_g", 10.05)), used,
+        return (P.tank_pressure(spec["h"], spec["h2"], spec.get("nxx", 0.0), spec.get("rho_g"), v.units), used,
                 "p = greater of N3 h and rho g (1 + 0.5 nxx) h2", "3-2-2/9.1")
     if c == "watertight":
-        return P.watertight_pressure(spec["h"]), used, f"p = N3 h, h = {spec['h']:g} m", "3-2-2/9.3"
+        return P.watertight_pressure(spec["h"], v.units), used, f"p = N3 h, N3 = {U.N3:g}, h = {spec['h']:g} {lb}", "3-2-2/9.3"
     if c == "wet_deck":
         f1 = F("F1_wetdeck", x, "F1")
-        return P.wet_deck_pressure(v, FD(), f1, spec["ha"]), used, f"wet deck equation, ha = {spec['ha']:g} m, h1/3 = {v.h13:g} m", "3-2-2/3.5"
+        return P.wet_deck_pressure(v, FD(), f1, spec["ha"]), used, f"wet deck equation, ha = {spec['ha']:g} {lb}, h1/3 = {v.h13:g} {lb}", "3-2-2/3.5"
     raise ValueError(f"unknown pressure calc '{c}'")
 
 
@@ -102,16 +105,21 @@ def operating_limits(v: P.Vessel):
         return []
     k0 = 12.0 * v.h13 / v.NhBw + 1.0
     out = []
-    for h in (0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.35, 3.5, 4.0, 4.5, 5.0):
+    hs = (0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.35, 3.5, 4.0, 4.5, 5.0) if v.units.upper() == "SI" else \
+         (1.5, 3.0, 5.0, 6.5, 8.0, 10.0, 11.0, 12.0, 13.0, 15.0, 16.5)
+    for h in hs:
         vm = min(v.V, v.V * (k0 / (12.0 * h / v.NhBw + 1.0)) ** 0.5)
         out.append({"h13": h, "V": vm})
     return out
 
 
 def run(data: dict) -> dict:
+    units = UN.get(data.get("units")).name
+    U = UN.get(units)
     vd = dict(data["vessel"])
+    vd["units"] = units
     v = P.Vessel(**vd)
-    mat = AluminumMaterial.from_dict(data["material"])
+    mat = AluminumMaterial.from_dict(data["material"], units)
     fac = Factors(data.get("curves"))
     stns = ST.parse(data.get("stations"), v)
     ids = [x["id"] for x in data.get("plates", [])] + [x["id"] for x in data.get("stiffeners", [])]
@@ -138,18 +146,18 @@ def run(data: dict) -> dict:
     for st in data.get("stiffeners", []):
         t_pl = st["t_plate_mm"]
         kind = st.get("kind", "secondary")
-        beff = effective_plate_width(kind, st["spacing_mm"], t_pl, st["l_m"])
-        sec = Section(st["profile"], st["hw_mm"], st["tw_mm"], st.get("bf_mm", 0.0), st.get("tf_mm", 0.0), t_pl, beff)
+        beff = effective_plate_width(kind, st["spacing_mm"], t_pl, st["l_m"], units)
+        sec = Section(st["profile"], st["hw_mm"], st["tw_mm"], st.get("bf_mm", 0.0), st.get("tf_mm", 0.0), t_pl, beff, units)
         p, used, eq, cl = resolve_pressure_detail(st["load"], v, fac, stns)
         pressures[f"{st['id']}:{st['member_case']}"] = p
         plog.append({"item": st["id"], "case": st["member_case"], "p": p, "factors": used, "equation": eq, "clause": cl})
-        results += check_stiffener(st["id"], mat, st["member_case"], p, st["spacing_mm"] / 1000.0, st["l_m"], sec,
+        results += check_stiffener(st["id"], mat, st["member_case"], p, st["spacing_mm"] / U.small_per_big, st["l_m"], sec,
                                    st.get("deck", False), st.get("bottom_primary", False),
                                    st.get("no_end_attach_wt", False), st.get("sigma_compr"))
     section = None
     hull_used = None
     if data.get("section"):
-        section = SEC.compute(data["section"])
+        section = SEC.compute(data["section"], units)
     if "hull_girder" in data or section:
         h = dict(data.get("hull_girder", {}))
         if section and not all(k in h for k in ("SM_deck_cm3", "SM_bottom_cm3", "I_cm4")):
@@ -166,23 +174,35 @@ def run(data: dict) -> dict:
             "sigma_y_unwelded": mat.sigma_y_unwelded, "sigma_u_unwelded": mat.sigma_u_unwelded,
             "sigma_y_welded": mat.sigma_y_welded, "sigma_u_welded": mat.sigma_u_welded, "sigma_ya": mat.sigma_ya, "tau_yw": mat.tau_yw},
             "pressures": pressures, "pressure_log": plog, "inputs": data, "project": data.get("project", {}),
-            "derived": {"delta_kg": v.delta_kg, "h13": v.h13, "H": v.H, "NhBw": v.NhBw, "d_min": v.d_min, "Cb_calc": v.Cb_calc,
+            "derived": {"delta_kg": v.delta_kg, "delta_load": v.delta_load, "AR": v.AR, "h13": v.h13, "H": v.H, "NhBw": v.NhBw, "d_min": v.d_min, "Cb_calc": v.Cb_calc,
                         "ncg_formula": P.ncg_formula(v), "ncg_used": P.ncg(v), "ncg_override": v.ncg_override},
             "version": __version__,
             "station_table": station_table(data, v, stns, fac),
             "section": section, "hull_girder_used": hull_used, "global_loads": global_loads,
             "operating_limits": operating_limits(v),
+            "units": units, "unit_labels": unit_labels(U), "unit_notes": UN.NOTES if units == "US" else [],
             "results": [dict(asdict(r), utilisation=r.utilisation, passed=r.passed) for r in results]}
+
+
+def unit_labels(U: UN.UnitSystem) -> dict:
+    """Labels and constants the report page needs for the selected unit system."""
+    return {"name": U.name, "big": U.big, "small": U.small, "p": U.p, "sig": U.sig, "area": U.area, "mod": U.mod,
+            "inertia": U.inertia, "sm_hg": U.sm_hg, "i_hg": U.i_hg, "moment": U.moment, "force": U.force,
+            "shear_hg": U.shear_hg, "disp": U.disp, "disp_p": U.disp_p, "rho": U.rho, "N3": U.N3, "N1": U.N1,
+            "H_a": U.H_a, "H_b": U.H_b, "L61": U.L61, "N2": U.N2, "KN": U.KN, "Q0_n": U.Q0_n, "sm_div": round(1.0 / U.sm_hg_per_mod), "k_wave": U.k_wave, "C4": U.C4, "K1_cat": U.K1_cat,
+            "K2_cat": U.K2_cat, "shear_allow_n": U.shear_allow_n, "q5_n": U.q5_n, "fp": U.fp, "E": U.E,
+            "cross_force": "lbf" if U.name == "US" else "kN", "cross_moment": "ft-lbf" if U.name == "US" else "kN-m",
+            "cross_disp": "lb" if U.name == "US" else "t", "small_per_big": U.small_per_big}
 
 
 def _global_loads(data, v, mat, section, hull_used, results) -> dict:
     """Global load summary plus the shear (3-2-1/1.9) and multi-hull cross-structure (3-2-1/3, 3-2-A2) checks.
     Appends check rows to `results` and returns the data for the report sheets."""
-    out = {"ncg": P.ncg(v), "n1": max(1.0 + P.ncg(v), HGM.min_1_plus_ncg(v.delta_t)), "moments": None, "shear": None,
+    out = {"ncg": P.ncg(v), "n1": max(1.0 + P.ncg(v), HGM.min_1_plus_ncg(v.delta_t, v.units)), "moments": None, "shear": None,
            "cross": None, "notes": []}
     h = hull_used or {}
     cb = h.get("Cb") if h.get("Cb") is not None else (v.Cb if v.Cb is not None else v.Cb_calc)
-    if v.L >= 61.0:
+    if v.L >= v.U.L61:
         m = HGM.moments_61m_plus(v, cb)
         if h.get("Mswh_kNm") is not None:
             m["Mswh"] = h["Mswh_kNm"]
@@ -209,13 +229,13 @@ def _global_loads(data, v, mat, section, hull_used, results) -> dict:
         results += rows_res
         out["shear"] = {"rows": rows, "I_cm4": I, "m_cm3": m_cm3, "web_t_mm": web_t, "allow": HGM.shear_allowable(mat),
                         "geometry": geom, "from_section": "m_cm3" not in hs and bool(geom),
-                        "required_by_rule": v.L >= 61.0 and v.n_hulls < 2}
+                        "required_by_rule": v.L >= v.U.L61 and v.n_hulls < 2}
         if not any(r["Fsw_given"] for r in rows):
             out["notes"].append("Still-water shear force Fsw was not entered and is taken as zero in the shear checks.")
         if geom and geom.get("centreline_web"):
             out["notes"].append("The section has a continuous longitudinal web on the centreline: 3-2-1/1.9.5 applies and shear flow must be determined by an acceptable method; the single-cell formula used here does not apply.")
-        if v.L < 61.0:
-            out["notes"].append("Hull girder shear is required only for craft of 61 m and over (3-2-1/1.9); evaluated here at the designer's request.")
+        if v.L < v.U.L61:
+            out["notes"].append(f"Hull girder shear is required only for craft of {v.U.L61:g} {v.U.big} (61 m / 200 ft) and over (3-2-1/1.9); evaluated here at the designer's request.")
     cs = data.get("cross_structure")
     if cs:
         if v.n_hulls < 2 or not v.B_cl:
@@ -223,9 +243,9 @@ def _global_loads(data, v, mat, section, hull_used, results) -> dict:
         cross = {}
         csec = None
         if cs.get("section"):
-            csec = SEC.compute(cs["section"])
+            csec = SEC.compute(cs["section"], v.units)
             cross["section"] = csec
-        SMt = cs.get("SMt_cm2m", min(csec["SM_deck_cm3"], csec["SM_bottom_cm3"]) / 100.0 if csec else None)
+        SMt = cs.get("SMt_cm2m", min(csec["SM_deck_cm3"], csec["SM_bottom_cm3"]) * v.U.sm_hg_per_mod if csec else None)
         At = cs.get("At_cm2", csec["shear"]["web_area_cm2"] if csec else None)
         if SMt is None or At is None:
             raise ValueError("cross_structure needs SMt_cm2m and At_cm2, or a cross-structure section")
@@ -239,7 +259,7 @@ def _global_loads(data, v, mat, section, hull_used, results) -> dict:
             cross["torsion"] = tors
         out["cross"] = cross
     elif v.n_hulls >= 2 and v.B_cl:
-        out["cross"] = {**HGM.catamaran_loads(v.delta_t, v.B_cl, v.L, P.ncg(v)), "allow": HGM.catamaran_allowables(mat), "checked": False}
+        out["cross"] = {**HGM.catamaran_loads(v.delta_t, v.B_cl, v.L, P.ncg(v), v.units), "allow": HGM.catamaran_allowables(mat), "checked": False}
     return out
 
 
@@ -248,7 +268,8 @@ def markdown(rep: dict) -> str:
     n_fail = sum(not r["passed"] for r in rows)
     out = [f"# Aluminum scantling check - ABS HSC Rules (July 2022)", "",
            f"Material: {rep['material']['name']} (source: {rep['material']['source']}); "
-           f"sigma_y design {rep['material']['sigma_y_design']:.1f} N/mm2, Q {rep['material']['Q']:.3f}",
+           f"sigma_y design {rep['material']['sigma_y_design']:.1f} {rep['unit_labels']['sig']}, Q {rep['material']['Q']:.3f}"
+           f"  [{rep['unit_labels']['name']} units]",
            f"ncg = {rep['ncg']:.2f} g", "",
            f"**{len(rows) - n_fail} of {len(rows)} checks pass; {n_fail} fail.**", "",
            "| Item | Check | Clause | Required | Provided | Util. | Result |", "|---|---|---|---|---|---|---|"]

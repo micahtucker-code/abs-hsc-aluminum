@@ -51,19 +51,45 @@ def list_alloys() -> list[tuple[str, str]]:
     return seen
 
 
-def lookup(alloy: str, product: str, thickness_mm: float) -> dict:
+# Thickness band edges as the Rule prints them in inches (the mm edge converts to a slightly different inch value).
+_EDGE_IN = {3.0: 0.118, 3.2: 0.125, 4.0: 0.1875, 9.5: 0.375, 12.5: 0.500, 30.0: 1.250, 40.0: 1.500, 50.0: 2.0,
+            80.0: 3.0, 130.0: 5.0, 150.0: 6.0}
+
+
+def _edge_in(mm: float) -> float:
+    return _EDGE_IN.get(mm, mm / 25.4)
+
+
+def _psi(n_mm2: float) -> float:
+    """The Rule's US value: the N/mm2 figure in psi, rounded to the nearest ksi as printed in 2-4-5/17 and 2-5-5."""
+    return round(n_mm2 * 1e6 / 6894.757293168 / 1000.0) * 1000.0
+
+
+def lookup(alloy: str, product: str, thickness_mm: float, units: str = "SI") -> dict:
     """Return a material dict for `AluminumMaterial.from_dict`.
 
-    Thickness bands are [from, to); the upper bound of the last band is inclusive."""
+    Thickness bands are [from, to); the upper bound of the last band is inclusive. With units = "US" the thickness
+    argument is in inches and the strengths are returned in psi (the Rule's ksi values, e.g. 5083-H116: 31.0 ksi)."""
+    us = (units or "SI").upper() == "US"
     rows = [r for r in _ROWS if r[0] == alloy and r[1] == product]
     if not rows:
         raise ValueError(f"No library entry for {alloy} {product}. Available: "
                          + ", ".join(f"{a} {p}" for a, p in list_alloys()) + ". Or enter values from 2-5-5 / 2-4-5.")
     last = max(r[3] for r in rows)
     for a, p, t0, t1, sy, su, wy, wu, src in rows:
-        if t0 <= thickness_mm < t1 or (thickness_mm == t1 == last):
+        if us:
+            hit = _edge_in(t0) <= thickness_mm < _edge_in(t1) or (thickness_mm == _edge_in(t1) and t1 == last)
+        else:
+            hit = t0 <= thickness_mm < t1 or (thickness_mm == t1 == last)
+        if hit:
+            if us:
+                return {"name": f"{a} {p}, {_edge_in(t0):g}-{_edge_in(t1):g} in", "sigma_y_unwelded": _psi(sy),
+                        "sigma_u_unwelded": _psi(su), "sigma_y_welded": _psi(wy), "sigma_u_welded": _psi(wu),
+                        "source": f"unwelded {src}; as-welded {_W} (ABS Materials & Welding Jul 2022, psi column)"}
             return {"name": f"{a} {p}, {t0:g}-{t1:g} mm", "sigma_y_unwelded": sy, "sigma_u_unwelded": su,
                     "sigma_y_welded": wy, "sigma_u_welded": wu,
                     "source": f"unwelded {src}; as-welded {_W} (ABS Materials & Welding Jul 2022)"}
     lo, hi = min(r[2] for r in rows), last
+    if us:
+        raise ValueError(f"{alloy} {product}: thickness {thickness_mm} in. is outside the tabulated {_edge_in(lo):g}-{_edge_in(hi):g} in. range")
     raise ValueError(f"{alloy} {product}: thickness {thickness_mm} mm is outside the tabulated {lo:g}-{hi:g} mm range")

@@ -26,6 +26,7 @@ td.n{text-align:right;font-variant-numeric:tabular-nums}
 .sum{font-size:15px;font-weight:600;margin:6px 0 10px}
 </style></head><body>
 <header><h1>ABS HSC Rules (July 2022) – aluminum scantling checker</h1>
+<label style="flex-direction:row;align-items:center;gap:6px;color:var(--ink)">Units <select id="units" onchange="setUnits(this.value)" style="width:auto" title="Switching converts the values already entered"><option value="SI">SI (m, mm, kN/m², N/mm²)</option><option value="US">US (ft, in, psi, long tons)</option></select></label>
 <button onclick="loadExample()">Load example</button>
 <button onclick="document.getElementById('f').click()">Open JSON…</button>
 <input type="file" id="f" accept=".json" hidden onchange="openFile(this)">
@@ -57,20 +58,37 @@ const META=__META__;
 /*__API__*/
 /*__REPORT__*/
 const $=id=>document.getElementById(id);
+// ---- unit system: the page text is written in SI; in US mode unit tokens in labels and hints are rewritten
+let UNITS="SI";
+const US_MAP=[[/Units: m, tonnes,/g,"Units: ft, long tons,"],[/kN\/m³\u200b/g,"psi/ft"],[/kN\/m²/g,"psi"],[/N\/mm²/g,"psi"],[/kN\/m³/g,"lb/ft³"],[/kN·m/g,"Ltf·ft"],[/\bkN\b/g,"Ltf"],[/cm²-m/g,"in²-ft"],[/cm⁴/g,"in⁴"],[/cm³/g,"in³"],[/cm²/g,"in²"],[/\bmm\b/g,"in"],[/\(m\)/g,"(ft)"],[/\(m,/g,"(ft,"],[/\btonnes\b/g,"long tons"],[/\b61 m\b/g,"200 ft"],[/\b24 m\b/g,"79 ft"],[/\u200b/g,""]];
+const ORIG=new WeakMap();
+const uText=t=>UNITS==="US"?US_MAP.reduce((a,[r,x])=>a.replace(r,x),t):t.replace(/\u200b/g,"");
+function unitizeNode(root){if(!root||root.nodeType!==1&&root.nodeType!==3)return;
+ const skip=n=>{const e=n.nodeType===3?n.parentElement:n;return !e||e.closest("#out,option,script,style,[data-nou]")};
+ const one=n=>{if(skip(n))return;let o=ORIG.get(n);if(o===undefined){o=n.nodeValue;ORIG.set(n,o)}const t=uText(o);if(n.nodeValue!==t)n.nodeValue=t};
+ if(root.nodeType===3){one(root);return}
+ const w=document.createTreeWalker(root,NodeFilter.SHOW_TEXT);let n;while((n=w.nextNode()))one(n);
+ root.querySelectorAll("[title]").forEach(e=>{if(!e.__ot)e.__ot=e.title;e.title=uText(e.__ot)})}
+function applyUnits(u){u=u==="US"?"US":"SI";UNITS=u;$("units").value=u;unitizeNode(document.querySelector("main"))}
+new MutationObserver(ms=>ms.forEach(m=>m.addedNodes.forEach(unitizeNode))).observe(document.querySelector("main"),{childList:true,subtree:true});
+async function setUnits(to){if(to===UNITS)return;let data;SOFT=true;try{data=collect()}catch(e){SOFT=false;$("units").value=UNITS;alert(e.message);return}SOFT=false;
+ const alt=$("alt").value,r=await API.convert(data,to);if(!r.ok){$("units").value=UNITS;alert(r.data.error);return}
+ populate(r.data);if(alt!=="")$("alt").value=to==="US"?+(alt/25.4).toFixed(3):+(alt*25.4).toFixed(2);
+ $("res").hidden=true;LAST=null}
 const VESSEL=[["L","Scantling length L (m)"],["Lw","Waterline length Lw (m)"],["B","Breadth B (m)"],["Bw","Max WL beam, one hull Bw (m)"],["D","Depth D (m)"],["d","Draft d (m)"],["delta_t","Displacement (tonnes)"],["V","Speed V (kn)"],["tau","Trim τ (deg)"],["beta_cg","Deadrise at LCG (deg)"],["n_hulls","Number of hulls"],["Cb","Block coeff. Cb (opt.)"],["B_cl","Hull CL spacing (m)"],["ncg_override","ncg override (g)"]];
 const REQ=["L","Lw","B","Bw","D","d","delta_t","V"];
 const MAT=[["name","Alloy / temper name","text"],["sigma_y_unwelded","Yield, unwelded"],["sigma_u_unwelded","Ultimate, unwelded"],["sigma_y_welded","Yield, welded"],["sigma_u_welded","Ultimate, welded"]];
 const HG=[["SM_deck_cm3","SM at deck (cm³)"],["SM_bottom_cm3","SM at bottom (cm³)"],["I_cm4","Moment of inertia (cm⁴)"],["Cb","Cb for hull girder (opt.)"],["Mswh_kNm","Still-water hogging (kN·m, opt.)"],["Msws_kNm","Still-water sagging (kN·m, opt.)"]];
 const PCALC={
  bottom_slam_cg:[["FD","FD (Fig.3)"]],
- bottom_slam_xx:[["station","Station (from table)","text"],["FD","FD"],["Kv","Kv (Fig.4)"],["Fv","Fv (Fig.5, L<61m)"],["beta_bx","Deadrise at section (deg)"]],
+ bottom_slam_xx:[["station","Station (from table)","text"],["FD","FD"],["Kv","Kv (Fig.4)"],["Fv","Fv (Fig.5, L<61 m)"],["beta_bx","Deadrise at section (deg)"]],
  hydro_bottom:[],
  side_slam:[["station","Station (from table)","text"],["FD","FD"],["Kv","Kv"],["beta_sx","Side deadrise βsx (deg)"]],
  side_hydro:[["y","Height above baseline y (m)"],["forward_of_0125L","Fwd of 0.125L from stem","bool"]],
  side_fore_end:[["station","Station (from table)","text"],["alpha","Flare angle α (deg)"],["beta_entry","Entry angle β (deg)"],["plating","Plating (else stiffeners)","bool",true]],
  deck:[["kind","Deck type","sel",["exposed_forward","enclosed_or_aft","accommodation","cargo","stores"]],["nxx","nxx (g)"],["W","Cargo W (kN/m²)"],["rho","Stores ρg (kN/m³)"],["h","Stores height h (m)"]],
  superstructure:[["location","Location","sel",["front_plating","front_stiffeners","side_aft_plating","side_aft_stiffeners","top_forward","top_aft"]]],
- tank:[["h","Head h (m)"],["h2","Head h2 to overflow (m)"],["nxx","nxx (g)"],["rho_g","ρg (kN/m³)"]],
+ tank:[["h","Head h (m)"],["h2","Head h2 to overflow (m)"],["nxx","nxx (g)"],["rho_g","ρg (kN/m³\u200b)"]],
  watertight:[["h","Head h (m)"]],
  wet_deck:[["FD","FD"],["F1","F1 (Fig.6)"],["ha","Air gap ha (m)"]],
  value:[["value","Pressure p (kN/m²)"]]};
@@ -103,39 +121,40 @@ function syncStn(){$("stnames").innerHTML=[...$("sttab").tBodies[0].rows].map(r=
 function genStations(){const n=Math.max(2,+$("nst").value||11);$("sttab").tBodies[0].innerHTML="";for(let i=0;i<n;i++){addStation({name:i===0?"AP":i===n-1?"FP":"Sta "+i,x_over_L:+(i/(n-1)).toFixed(3)})}}
 function readStations(){const rows=[...$("sttab").tBodies[0].rows].map(r=>{const o={};r.querySelectorAll("[data-k]").forEach(i=>{if(i.value!=="")o[i.dataset.k]=i.type==="number"?+i.value:i.value});return o});return rows}
 const num=v=>v===""?undefined:+v;
+let SOFT=false;const nz=v=>SOFT&&v===""?undefined:+v;  // SOFT: collect partial input (for unit switching) without validation
 function collect(){
  const vessel={};$("vessel").querySelectorAll("[data-k]").forEach(i=>{const k=i.dataset.k;if(i.type==="checkbox")vessel[k]=i.checked;else if(i.tagName==="SELECT")vessel[k]=i.value;else if(i.value!=="")vessel[k]=+i.value});
- const missing=REQ.filter(k=>vessel[k]===undefined);if(missing.length)throw new Error("Vessel inputs required: "+missing.join(", "));
+ const missing=REQ.filter(k=>vessel[k]===undefined);if(missing.length&&!SOFT)throw new Error("Vessel inputs required: "+missing.join(", "));
  vessel.n_hulls=vessel.n_hulls??1;
  const material={};$("mat").querySelectorAll("[data-k]").forEach(i=>{if(i.value!=="")material[i.dataset.k]=i.type==="number"?+i.value:i.value});
  const project={};$("project").querySelectorAll("[data-k]").forEach(i=>{if(i.value!=="")project[i.dataset.k]=i.value});
- const data={project,vessel,material,plates:[],stiffeners:[]};
+ const data={units:UNITS,project,vessel,material,plates:[],stiffeners:[]};
  document.querySelectorAll(".plate").forEach(e=>{const g=k=>e.querySelector(`.grid [data-k=${k}]`);const loads={};
   e.querySelectorAll(".load").forEach(l=>{loads[l.querySelector("[data-k=case]").value]=readP(l.querySelector(".pr"))});
-  data.plates.push({id:g("id").value,location:g("location").value,s_mm:+g("s_mm").value,l_mm:+g("l_mm").value,t_mm:+g("t_mm").value,outside_midship_0_4L:g("outside").checked,loads})});
+  data.plates.push({id:g("id").value,location:g("location").value,s_mm:nz(g("s_mm").value),l_mm:nz(g("l_mm").value),t_mm:nz(g("t_mm").value),outside_midship_0_4L:g("outside").checked,loads})});
  document.querySelectorAll(".stiff").forEach(e=>{const s={};e.querySelectorAll(":scope>.grid [data-k]").forEach(i=>{const k=i.dataset.k;if(i.type==="checkbox")s[k]=i.checked;else if(i.tagName==="SELECT"||i.type==="text")s[k]=i.value;else if(i.value!=="")s[k]=+i.value});s.load=readP(e.querySelector(".pr"));data.stiffeners.push(s)});
  const hg={};$("hg").querySelectorAll("[data-k]").forEach(i=>{if(i.value!=="")hg[i.dataset.k]=+i.value});
  {const rows=readStations();if(rows.length){data.stations={rows};if($("stFD").value!=="")data.stations.FD=+$("stFD").value}}
- if(Object.keys(hg).length){if(!("SM_deck_cm3"in hg&&"SM_bottom_cm3"in hg&&"I_cm4"in hg))throw new Error("Hull girder needs SM deck, SM bottom and I (or leave all blank).");data.hull_girder=hg}
+ if(Object.keys(hg).length){if(!SOFT&&!("SM_deck_cm3"in hg&&"SM_bottom_cm3"in hg&&"I_cm4"in hg))throw new Error("Hull girder needs SM deck, SM bottom and I (or leave all blank).");data.hull_girder=hg}
  {const sc=secCollect();if(sc)data.section=sc}
  collectShear(data)
  return data}
 function setVals(root,d){root.querySelectorAll("[data-k]").forEach(i=>{const v=d[i.dataset.k];if(v===undefined)return;if(i.type==="checkbox")i.checked=!!v;else i.value=v})}
-function populate(d){setVals($("project"),d.project||{});setVals($("vessel"),d.vessel||{});setVals($("mat"),d.material||{});$("plates").innerHTML="";$("stiffs").innerHTML="";(d.plates||[]).forEach(addPlate);(d.stiffeners||[]).forEach(addStiff);setVals($("hg"),d.hull_girder||{});$("sttab").tBodies[0].innerHTML="";((d.stations||{}).rows||[]).forEach(addStation);$("stFD").value=(d.stations||{}).FD??"";syncStn();populateSection(d.section);populateShear(d)}
-async function fillAlloy(){const {ok,data:j}=await API.alloy($("alloy").value,$("alt").value);
+function populate(d){applyUnits(d.units||"SI");setVals($("project"),d.project||{});setVals($("vessel"),d.vessel||{});setVals($("mat"),d.material||{});$("plates").innerHTML="";$("stiffs").innerHTML="";(d.plates||[]).forEach(addPlate);(d.stiffeners||[]).forEach(addStiff);setVals($("hg"),d.hull_girder||{});$("sttab").tBodies[0].innerHTML="";((d.stations||{}).rows||[]).forEach(addStation);$("stFD").value=(d.stations||{}).FD??"";syncStn();populateSection(d.section);populateShear(d)}
+async function fillAlloy(){const {ok,data:j}=await API.alloy($("alloy").value,$("alt").value,UNITS);
  if(!ok){$("amsg").textContent=j.error;return}$("amsg").textContent="Source: "+j.source;setVals($("mat"),j)}
-async function loadExample(){populate(await API.example())}
+async function loadExample(){let ex=await API.example();if(UNITS==="US"){const r=await API.convert(ex,"US");if(r.ok)ex=r.data}populate(ex)}
 function openFile(inp){const r=new FileReader();r.onload=()=>{try{populate(JSON.parse(r.result))}catch(e){alert("Could not read file: "+e)}};r.readAsText(inp.files[0])}
 function dl(name,text,type){const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([text],{type}));a.download=name;a.click()}
 function saveJSON(){try{dl("vessel.json",JSON.stringify(collect(),null,2),"application/json")}catch(e){alert(e.message)}}
 let MD="",LAST=null;function dlMd(){dl("report.md",MD,"text/markdown")}
-const fmt=x=>x>=100?x.toFixed(0):x>=10?x.toFixed(1):x.toFixed(2);
+const fmt=x=>x>=100?x.toFixed(0):x>=10?x.toFixed(1):x>=1?x.toFixed(2):x>=0.1?x.toFixed(3):x.toFixed(4);
 async function runCheck(){const box=$("res"),out=$("out");box.hidden=false;
  let data;try{data=collect()}catch(e){out.innerHTML=`<div class="warn">${e.message}</div>`;return}
  out.innerHTML='<p class="hint">Running…</p>';const {ok,data:j}=await API.run(data);
  if(!ok){out.innerHTML=`<div class="warn">${j.error}</div>`;return}
  LAST=j;MD=j.markdown;const fails=j.results.filter(x=>!x.passed).length;
- out.innerHTML=`<div class="sum">${j.results.length-fails} of ${j.results.length} checks pass`+(fails?` – <span style="color:var(--bad)">${fails} fail</span>`:"")+`</div><p class="hint">ncg = ${j.ncg.toFixed(2)} g · σy design ${j.material.sigma_y_design.toFixed(1)} N/mm² · Q = ${j.material.Q.toFixed(3)}</p><table><tr><th>Item</th><th>Check</th><th>Clause</th><th>Required</th><th>Provided</th><th>Utilisation</th><th></th></tr>`+
+ out.innerHTML=`<div class="sum">${j.results.length-fails} of ${j.results.length} checks pass`+(fails?` – <span style="color:var(--bad)">${fails} fail</span>`:"")+`</div><p class="hint">ncg = ${j.ncg.toFixed(2)} g · σy design ${j.material.sigma_y_design.toFixed(j.units==="US"?0:1)} ${j.unit_labels.sig} · ${j.units} units · Q = ${j.material.Q.toFixed(3)}</p><table><tr><th>Item</th><th>Check</th><th>Clause</th><th>Required</th><th>Provided</th><th>Utilisation</th><th></th></tr>`+
  j.results.map(x=>`<tr><td>${x.id}</td><td>${x.kind}</td><td>${x.clause}</td><td class="n">${fmt(x.required)} ${x.unit}</td><td class="n">${fmt(x.provided)}</td><td><div class="bar"><i style="width:${Math.min(100,x.utilisation*100)}%;background:${x.passed?"var(--ok)":"var(--bad)"}"></i></div> ${x.utilisation.toFixed(2)}</td><td><span class="${x.passed?"pass":"fail"}">${x.passed?"PASS":"FAIL"}</span></td></tr>`).join("")+"</table>";
  box.scrollIntoView({behavior:"smooth"})}
 function loadAsset(inp,k){const f=inp.files[0];if(!f){delete ASSETS[k];return}const r=new FileReader();r.onload=()=>{ASSETS[k]=r.result};r.readAsDataURL(f)}
@@ -155,14 +174,14 @@ function makeSecEd(p,cfg){
  $("sec_"+p).innerHTML=`<${H}${hs}>${cfg.title}</${H}><p class="hint">${cfg.intro}</p>
 <div class="grid">${cfg.mirror?`<label>Enter one side only (mirror about centreline)<input type="checkbox" id="${I("mirror")}"></label>`:""}<label>${cfg.deckLabel} (mm, optional)<input id="${I("deck")}" type="number" step="any"></label><label>Baseline z (mm, optional)<input id="${I("base")}" type="number" step="any"></label></div>
 <h3 style="font-size:13px;margin:12px 0 4px">Import a CAD drawing (DXF)</h3><p class="hint">Draw or export the section as lines, polylines and arcs (one line per plate, stiffener web or flange), with each thickness on its own layer, for example <i>T8</i> or <i>PL_10</i>. Use an ASCII DXF with blocks exploded. A PDF drawing cannot be used directly; convert it to DXF in your CAD program first.</p>
-<div class="grid"><label>DXF file<input type="file" id="${I("dxfFile")}" accept=".dxf" onchange="${C("loadFile(this)")}"></label><label>Drawing plane (horizontal, vertical)<select id="${I("dxfPlane")}">${["xy","xz","yz","yx","zx","zy"].map(x=>`<option${x===cfg.plane?" selected":""}>${x}</option>`).join("")}</select></label><label>Drawing units<select id="${I("dxfUnit")}"><option value="">Auto (file, else mm)</option><option>mm</option><option>cm</option><option>m</option><option>in</option><option>ft</option></select></label><label>${cfg.originLabel}<input id="${I("dxfY0")}" type="number" step="any" placeholder="0"></label><label>Baseline at drawing coordinate<input id="${I("dxfZ0")}" type="number" step="any" placeholder="lowest point"></label><label>&nbsp;<button onclick="${C("readDxf()")}">Read DXF</button></label></div>
+<div class="grid"><label>DXF file<input type="file" id="${I("dxfFile")}" accept=".dxf" onchange="${C("loadFile(this)")}"></label><label>Drawing plane (horizontal, vertical)<select id="${I("dxfPlane")}">${["xy","xz","yz","yx","zx","zy"].map(x=>`<option${x===cfg.plane?" selected":""}>${x}</option>`).join("")}</select></label><label>Drawing units<select id="${I("dxfUnit")}"><option value="">Auto (file, else the system default)</option><option>mm</option><option>cm</option><option>m</option><option>in</option><option>ft</option></select></label><label>${cfg.originLabel}<input id="${I("dxfY0")}" type="number" step="any" placeholder="0"></label><label>Baseline at drawing coordinate<input id="${I("dxfZ0")}" type="number" step="any" placeholder="lowest point"></label><label>&nbsp;<button onclick="${C("readDxf()")}">Read DXF</button></label></div>
 <div id="${I("dxfOut")}"></div>
 <h3 style="font-size:13px;margin:12px 0 4px">Members</h3><p class="hint">Each row is a straight plate line (${cfg.h} horizontal, z up from the baseline, mm), optionally with a regular set of stiffeners (placed on the side facing the inside of the section; choose "out" to flip). Effectiveness 0 to 1 scales a member (0 leaves it out).</p>
 <div style="overflow-x:auto"><table id="${I("mtab")}"><thead><tr>${mh}</tr></thead><tbody></tbody></table></div><button onclick="${C("addMember()")}">+ Member</button>
 <p style="margin-top:10px"><button class="p" onclick="${C("calc()")}">Calculate section</button></p><div id="${I("out")}"></div>`;
  S.addMember=d=>{d=d||{};const st=d.stiffeners||{};const v={name:d.name,y1:d.y1,z1:d.z1,y2:d.y2,z2:d.z2,t_mm:d.t_mm,effective:d.effective,sp:st.spacing_mm,prof:st.profile||"none",hw:st.hw_mm,tw:st.tw_mm,bf:st.bf_mm,tf:st.tf_mm,side:st.side||"in"};
   const tr=document.createElement("tr");tr.innerHTML=MB.map(([k,l,t,o])=>t==="sel"?`<td><select data-k="${k}">${opts(o,v[k])}</select></td>`:`<td><input data-k="${k}" type="${t||"number"}" step="any" value="${v[k]??""}" style="min-width:${t==="text"?o:64}px"></td>`).join("")+`<td><button class="x" onclick="this.closest('tr').remove()">x</button></td>`;E("mtab").tBodies[0].appendChild(tr)};
- S.members=()=>[...E("mtab").tBodies[0].rows].map((r,i)=>{const g=k=>r.querySelector(`[data-k=${k}]`).value;const n=k=>{if(g(k)==="")throw new Error(`${cfg.label} member ${i+1}: "${k}" is empty.`);return +g(k)};
+ S.members=()=>[...E("mtab").tBodies[0].rows].map((r,i)=>{const g=k=>r.querySelector(`[data-k=${k}]`).value;const n=k=>{if(g(k)==="")if(SOFT)return undefined;else throw new Error(`${cfg.label} member ${i+1}: "${k}" is empty.`);return +g(k)};
   const m={name:g("name")||"member "+(i+1),y1:n("y1"),z1:n("z1"),y2:n("y2"),z2:n("z2"),t_mm:n("t_mm")};if(g("effective")!=="")m.effective=+g("effective");
   if(g("prof")!=="none"){m.stiffeners={profile:g("prof"),spacing_mm:n("sp"),hw_mm:n("hw"),tw_mm:n("tw"),side:g("side")};if(g("prof")!=="flat"){m.stiffeners.bf_mm=n("bf");m.stiffeners.tf_mm=n("tf")}}return m});
  S.readLayers=()=>{const t=E("ltab");if(!S.dxf||!t)return;t.querySelectorAll("tr[data-layer]").forEach(r=>{const L=S.dxf.layers[r.dataset.layer];const v=r.querySelector("[data-f=t]").value;L.t_mm=v===""?"":+v;const e=r.querySelector("[data-f=eff]").value;L.eff=e===""?1:+e;L.ignore=r.querySelector("[data-f=ignore]").checked})};
@@ -170,20 +189,20 @@ function makeSecEd(p,cfg){
   if(E("deck").value!=="")s.deck_z_mm=+E("deck").value;if(E("base").value!=="")s.base_z_mm=+E("base").value;if(S.dxf)s.dxf=S.dxf;return s};
  S.loadFile=inp=>{const f=inp.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{S.text=r.result;S.readDxf(f.name)};r.readAsText(f)};
  S.readDxf=async name=>{if(!S.text){E("dxfOut").innerHTML='<div class="warn">Choose a DXF file first.</div>';return}
-  const prev=S.dxf?S.dxf.layers:{};const {ok,data:d}=await API.dxf(S.text,E("dxfPlane").value,E("dxfUnit").value,E("dxfY0").value,E("dxfZ0").value);
+  const prev=S.dxf?S.dxf.layers:{};const {ok,data:d}=await API.dxf(S.text,E("dxfPlane").value,E("dxfUnit").value,E("dxfY0").value,E("dxfZ0").value,UNITS);
   if(!ok){S.dxf=null;E("dxfOut").innerHTML=`<div class="warn">${d.error}</div>`;return}
   const layers={};Object.entries(d.layers).forEach(([k,L])=>{const o=prev[k];layers[k]={n:L.n,length_mm:L.length_mm,t_mm:o?o.t_mm:L.suggested_t_mm??"",eff:o?o.eff:1,ignore:o?o.ignore:false}});
   S.dxf={layers,segments:d.segments,meta:{file:name||(S.dxf&&S.dxf.meta.file)||"drawing.dxf",unit:d.unit,plane:E("dxfPlane").value,bbox:d.bbox,warnings:d.warnings}};S.render()};
  S.remove=()=>{S.dxf=null;S.text="";S.render()};
  S.render=()=>{const o=E("dxfOut");if(!S.dxf){o.innerHTML="";return}const m=S.dxf.meta;
-  o.innerHTML=`<p class="hint"><b>${_esc(m.file)}</b>: ${S.dxf.segments.length} line segments, drawing units ${m.unit}, extent ${(m.bbox[2]-m.bbox[0]).toFixed(0)} x ${(m.bbox[3]-m.bbox[1]).toFixed(0)} mm. <button class="x" onclick="${C("remove()")}">Remove drawing</button></p>`
+  o.innerHTML=`<p class="hint"><b>${_esc(m.file)}</b>: ${S.dxf.segments.length} line segments, drawing units ${m.unit}, extent ${(m.bbox[2]-m.bbox[0]).toFixed(UNITS==="US"?1:0)} x ${(m.bbox[3]-m.bbox[1]).toFixed(UNITS==="US"?1:0)} mm. <button class="x" onclick="${C("remove()")}">Remove drawing</button></p>`
   +(m.warnings||[]).map(w=>`<div class="warn">${_esc(w)}</div>`).join("")
-  +`<table id="${I("ltab")}"><tr><th>Layer</th><th>Segments</th><th>Length (mm)</th><th>Thickness (mm)</th><th>Effectiveness</th><th>Ignore layer</th></tr>${Object.entries(S.dxf.layers).map(([k,L])=>`<tr data-layer="${_esc(k)}"><td>${_esc(k)}</td><td class="n">${L.n}</td><td class="n">${L.length_mm.toFixed(0)}</td><td><input data-f="t" type="number" step="any" value="${L.t_mm}" style="width:80px"></td><td><input data-f="eff" type="number" step="any" min="0" max="1" value="${L.eff}" style="width:70px"></td><td><input data-f="ignore" type="checkbox"${L.ignore?" checked":""}></td></tr>`).join("")}</table><p class="hint">A layer needs a thickness (or must be ignored) or it is left out of the section and reported.</p>`};
+  +`<table id="${I("ltab")}"><tr><th>Layer</th><th>Segments</th><th>Length (mm)</th><th>Thickness (mm)</th><th>Effectiveness</th><th>Ignore layer</th></tr>${Object.entries(S.dxf.layers).map(([k,L])=>`<tr data-layer="${_esc(k)}"><td>${_esc(k)}</td><td class="n">${L.n}</td><td class="n">${L.length_mm.toFixed(UNITS==="US"?1:0)}</td><td><input data-f="t" type="number" step="any" value="${L.t_mm}" style="width:80px"></td><td><input data-f="eff" type="number" step="any" min="0" max="1" value="${L.eff}" style="width:70px"></td><td><input data-f="ignore" type="checkbox"${L.ignore?" checked":""}></td></tr>`).join("")}</table><p class="hint">A layer needs a thickness (or must be ignored) or it is left out of the section and reported.</p>`};
  S.calc=async()=>{const out=E("out");let s;try{s=S.collect()}catch(e){out.innerHTML=`<div class="warn">${e.message}</div>`;return}
   if(!s){out.innerHTML='<div class="warn">Add members or import a DXF first.</div>';return}
-  const {ok,data:r}=await API.section(s);if(!ok){out.innerHTML=`<div class="warn">${r.error}</div>`;return}
+  const {ok,data:r}=await API.section(s,UNITS);const us=UNITS==="US";if(!ok){out.innerHTML=`<div class="warn">${r.error}</div>`;return}
   const sk=Object.entries(r.skipped_layers||{});
-  out.innerHTML=(sk.length?`<div class="warn">Left out of the section (no thickness): ${sk.map(([k,n])=>_esc(k)+" ("+n+" segments)").join(", ")}</div>`:"")+`<table style="max-width:520px"><tr><td>Effective area</td><td class="n">${r.A_cm2.toFixed(1)} cm²</td></tr><tr><td>Neutral axis above baseline</td><td class="n">${r.z_NA_mm.toFixed(1)} mm</td></tr><tr><td>Moment of inertia I</td><td class="n">${r.I_cm4.toFixed(0)} cm⁴</td></tr><tr><td>Section modulus at ${cfg.topName}</td><td class="n">${r.SM_deck_cm3.toFixed(0)} cm³</td></tr><tr><td>Section modulus at bottom</td><td class="n">${r.SM_bottom_cm3.toFixed(0)} cm³</td></tr>${cfg.extra?cfg.extra(r):""}</table><div style="margin-top:8px;border:1px solid var(--line);border-radius:6px;padding:6px;background:#fff">${sectionSVG(r,{maxh:"380px"})}</div><p class="hint">Check the picture against your drawing: stiffeners should sit on the inside, and the red dashed line is the neutral axis.</p>`};
+  out.innerHTML=(sk.length?`<div class="warn">Left out of the section (no thickness): ${sk.map(([k,n])=>_esc(k)+" ("+n+" segments)").join(", ")}</div>`:"")+`<table style="max-width:520px"><tr><td>Effective area</td><td class="n">${r.A_cm2.toFixed(1)} cm²</td></tr><tr><td>Neutral axis above baseline</td><td class="n">${r.z_NA_mm.toFixed(us?2:1)} mm</td></tr><tr><td>Moment of inertia I</td><td class="n">${r.I_cm4.toFixed(0)} cm⁴</td></tr><tr><td>Section modulus at ${cfg.topName}</td><td class="n">${r.SM_deck_cm3.toFixed(0)} cm³</td></tr><tr><td>Section modulus at bottom</td><td class="n">${r.SM_bottom_cm3.toFixed(0)} cm³</td></tr>${cfg.extra?cfg.extra(r):""}</table><div style="margin-top:8px;border:1px solid var(--line);border-radius:6px;padding:6px;background:#fff">${sectionSVG(r,{maxh:"380px",u:us?"in":"mm",d:us?1:0,sc:us?1/25.4:1})}</div><p class="hint">Check the picture against your drawing: stiffeners should sit on the inside, and the red dashed line is the neutral axis.</p>`};
  S.populate=s=>{E("mtab").tBodies[0].innerHTML="";S.dxf=null;S.text="";s=s||{};if(cfg.mirror)E("mirror").checked=!!s.mirror;E("deck").value=s.deck_z_mm??"";E("base").value=s.base_z_mm??"";(s.members||[]).forEach(S.addMember);
   if(s.dxf){S.dxf={layers:s.dxf.layers,segments:s.dxf.segments,meta:s.dxf.meta||{file:"drawing.dxf",unit:"mm",plane:"xy",bbox:[0,0,0,0],warnings:[]}};if(!s.dxf.meta){const h=s.dxf.segments.flatMap(a=>[a[1],a[3]]),v=s.dxf.segments.flatMap(a=>[a[2],a[4]]);S.dxf.meta.bbox=[Math.min(...h),Math.min(...v),Math.max(...h),Math.max(...v)]}}S.render();E("out").innerHTML=""};
  SE[p]=S;return S}
@@ -191,7 +210,7 @@ makeSecEd("mid",{heading:true,label:"Section",mirror:true,h:"y",plane:"xy",topNa
  title:"Midship section properties",intro:"Builds the section modulus and inertia for the hull girder check. Enter plating and stiffened panels as lines (y from the centreline, z up from the baseline, mm), or import a DXF section drawing and give a thickness to each layer. If you leave the three hull girder fields below blank, the calculated values are used."});
 makeSecEd("cd",{heading:false,label:"Cross-deck section",mirror:false,h:"x",plane:"xz",topName:"top",deckLabel:"Top of structure z",originLabel:"Origin (x = 0) at drawing coordinate",
  title:"Cross-deck section (optional)",intro:"Describe the centreline section through the cross deck / wet deck structure, cut by a vertical longitudinal plane: x is the distance along the craft (from any origin), z is up from the baseline. Its smaller section modulus (as cm²-m) gives SMt and its vertical web area gives At, unless you type your own values below. Include only continuous, effective structure (3-2-1/3.7).",
- extra:r=>`<tr><td>SMt (smaller modulus)</td><td class="n">${(Math.min(r.SM_deck_cm3,r.SM_bottom_cm3)/100).toFixed(1)} cm²-m</td></tr><tr><td>Shear area At (vertical webs)</td><td class="n">${r.shear.web_area_cm2.toFixed(1)} cm²</td></tr>`});
+ extra:r=>`<tr><td>SMt (smaller modulus)</td><td class="n">${(Math.min(r.SM_deck_cm3,r.SM_bottom_cm3)/(UNITS==="US"?12:100)).toFixed(1)} cm²-m</td></tr><tr><td>Shear area At (vertical webs)</td><td class="n">${r.shear.web_area_cm2.toFixed(1)} cm²</td></tr>`});
 const secCollect=()=>SE.mid.collect(),populateSection=s=>SE.mid.populate(s);
 
 // ---- shear and cross structure
@@ -200,11 +219,11 @@ const CSC=[["name","Name","text",110],["x_m","x"],["span_m","L"],["I_cm4","I"],[
 function addRowTo(id,cols,d){d=d||{};const tr=document.createElement("tr");tr.innerHTML=cols.map(([k,l,t,w])=>`<td><input data-k="${k}" type="${t||"number"}" step="any" value="${d[k]??""}" style="min-width:${t==="text"?w:70}px"></td>`).join("")+`<td><button class="x" onclick="this.closest('tr').remove()">x</button></td>`;$(id).tBodies[0].appendChild(tr)}
 function readRowsOf(id,label){return [...$(id).tBodies[0].rows].map((r,i)=>{const o={};r.querySelectorAll("[data-k]").forEach(x=>{if(x.value!=="")o[x.dataset.k]=x.type==="number"?+x.value:x.value});return o}).filter(o=>Object.keys(o).length)}
 function collectShear(data){
- const st=readRowsOf("shtab");if(st.length){st.forEach((o,i)=>{if(o.F1===undefined||o.F2===undefined)throw new Error(`Hull shear station ${i+1}: F1 and F2 are required.`)});
+ const st=readRowsOf("shtab");if(st.length){st.forEach((o,i)=>{if(!SOFT&&(o.F1===undefined||o.F2===undefined))throw new Error(`Hull shear station ${i+1}: F1 and F2 are required.`)});
   const hs={stations:st,combined_sum:$("shComb").checked};if($("shM").value!=="")hs.m_cm3=+$("shM").value;if($("shTs").value!=="")hs.ts_mm=+$("shTs").value;if($("shN").value!=="")hs.n_webs=+$("shN").value;data.hull_shear=hs}
  const el=readRowsOf("cstab"),sm=$("csSM").value,at=$("csAt").value,sec=SE.cd.collect();
  if(el.length||sm!==""||at!==""||sec){const cs={};if(sm!=="")cs.SMt_cm2m=+sm;if(at!=="")cs.At_cm2=+at;if(el.length)cs.elements=el;if(sec)cs.section=sec;
-  if(!sec&&!("SMt_cm2m"in cs&&"At_cm2"in cs))throw new Error("Cross structure needs both SMt and At, or a cross-deck section.");data.cross_structure=cs}}
+  if(!SOFT&&!sec&&!("SMt_cm2m"in cs&&"At_cm2"in cs))throw new Error("Cross structure needs both SMt and At, or a cross-deck section.");data.cross_structure=cs}}
 function populateShear(d){$("shtab").tBodies[0].innerHTML="";$("cstab").tBodies[0].innerHTML="";const hs=d.hull_shear||{},cs=d.cross_structure||{};
  (hs.stations||[]).forEach(o=>addRowTo("shtab",SHC,o));$("shM").value=hs.m_cm3??"";$("shTs").value=hs.ts_mm??"";$("shN").value=hs.n_webs??"";$("shComb").checked=hs.combined_sum!==false;
  (cs.elements||[]).forEach(o=>addRowTo("cstab",CSC,o));$("csSM").value=cs.SMt_cm2m??"";$("csAt").value=cs.At_cm2??"";SE.cd.populate(cs.section)}

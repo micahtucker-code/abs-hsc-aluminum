@@ -38,8 +38,9 @@ api = """const API=(()=>{let py;
   pyodide.unpackArchive(buf,"zip");
   py=pyodide.pyimport("abs_hsc_al.webapi");s.textContent="Ready (v__VER__, offline-capable)";return py})();
  const call=async(f,...a)=>{const p=await ready;return JSON.parse(p[f](...a))};
- return {run:d=>call("run_json",JSON.stringify(d)),alloy:(a,t)=>call("alloy_json",a,String(t)),
-  dxf:(t,pl,u,y0,z0)=>call("dxf_json",t,pl,u,String(y0),String(z0)),section:d=>call("section_json",JSON.stringify(d)),
+ return {run:d=>call("run_json",JSON.stringify(d)),alloy:(a,t,u)=>call("alloy_json",a,String(t),u||"SI"),
+  dxf:(t,pl,u,y0,z0,us)=>call("dxf_json",t,pl,u,String(y0),String(z0),us||"SI"),section:(d,us)=>call("section_json",JSON.stringify(d),us||"SI"),
+  convert:(d,to)=>call("convert_json",JSON.stringify(d),to),
   example:async()=>(await fetch("example.json?v=__VER__")).json(),ready}})();
 document.addEventListener("DOMContentLoaded",()=>{});""".replace("__VER__", __version__)
 footer = (f"Version {__version__} (built {datetime.date.today()}). Runs entirely in your browser; no vessel data is uploaded. "

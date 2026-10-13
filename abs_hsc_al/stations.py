@@ -53,9 +53,10 @@ def table(stations: list[Station], v: P.Vessel, FD: float) -> list[dict]:
     """One row per station. FD is the design-area factor for the representative panel (3-2-2/1.1.3 FIGURE 3)."""
     rows = []
     ncg = P.ncg(v)
-    short = v.L < 61.0
+    short = v.L < v.U.L61
     for s in stations:
-        r = {"name": s.name, "x_over_L": s.x_over_L, "x_m": s.x_over_L * v.L, "Kv": s.Kv, "Fv": s.Fv,
+        r = {"name": s.name, "x_over_L": s.x_over_L, "x_m": s.x_over_L * v.L,  # m (ft for US)
+              "Kv": s.Kv, "Fv": s.Fv,
              "beta_bx": s.beta_bx if s.beta_bx is not None else v.beta_cg,
              "beta_sx": s.beta_sx, "nxx": None, "pbxx": None, "pss": None, "psf": None, "notes": []}
         if s.Kv is not None:
@@ -73,7 +74,7 @@ def table(stations: list[Station], v: P.Vessel, FD: float) -> list[dict]:
         elif s.beta_sx is not None:
             r["notes"].append("side slamming: enter Kv")
         # fore end (L >= 30 m, forward of 0.125 L from the stem)
-        if s.alpha is not None and s.beta_entry is not None and v.L >= 30.0 and s.x_over_L >= 0.875:
+        if s.alpha is not None and s.beta_entry is not None and v.L >= v.U.L30_fore and s.x_over_L >= 0.875:
             r["psf"] = P.side_fore_end(v, s.alpha, s.beta_entry, plating=True)
         rows.append(r)
     return rows

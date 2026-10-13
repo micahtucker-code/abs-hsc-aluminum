@@ -19,10 +19,11 @@ EXAMPLE = os.path.join(HERE, "..", "inputs", "example_vessel.json")
 
 _SERVER_API = """const API={
  async run(d){const r=await fetch("/run",{method:"POST",body:JSON.stringify(d)});return {ok:r.ok,data:await r.json()}},
- async alloy(a,t){const r=await fetch("/alloy?alloy="+encodeURIComponent(a)+"&t="+t);return {ok:r.ok,data:await r.json()}},
+ async alloy(a,t,u){const r=await fetch("/alloy?alloy="+encodeURIComponent(a)+"&t="+t+"&units="+(u||"SI"));return {ok:r.ok,data:await r.json()}},
  async example(){return (await fetch("/example")).json()},
- async dxf(t,pl,u,y0,z0){const r=await fetch("/dxf",{method:"POST",body:JSON.stringify({text:t,plane:pl,unit:u,y0:y0,z0:z0})});return r.json()},
- async section(d){const r=await fetch("/section",{method:"POST",body:JSON.stringify(d)});return r.json()}};"""
+ async dxf(t,pl,u,y0,z0,us){const r=await fetch("/dxf",{method:"POST",body:JSON.stringify({text:t,plane:pl,unit:u,y0:y0,z0:z0,units:us||"SI"})});return r.json()},
+ async section(d,us){const r=await fetch("/section?units="+(us||"SI"),{method:"POST",body:JSON.stringify(d)});return r.json()},
+ async convert(d,to){const r=await fetch("/convert?to="+to,{method:"POST",body:JSON.stringify(d)});return r.json()}};"""
 PAGE = (open(os.path.join(HERE, "gui_page.html"), encoding="utf-8").read()
         .replace("/*__API__*/", _SERVER_API)
         .replace("/*__REPORT__*/", open(os.path.join(HERE, "report_view.js"), encoding="utf-8").read()).replace("__FOOTER__", "Local version. Supports a designer's check; not an ABS approval."))
@@ -49,7 +50,7 @@ class Handler(BaseHTTPRequestHandler):
             q = parse_qs(urlparse(self.path).query)
             try:
                 a, pr = q["alloy"][0].split("|")
-                self._send(200, json.dumps(lookup(a, pr, float(q["t"][0]))).encode())
+                self._send(200, json.dumps(lookup(a, pr, float(q["t"][0]), q.get("units", ["SI"])[0])).encode())
             except Exception as e:
                 self._send(400, json.dumps({"error": str(e)}).encode())
         elif self.path == "/example":
@@ -59,15 +60,20 @@ class Handler(BaseHTTPRequestHandler):
             self._send(404, b'{"error":"not found"}')
 
     def do_POST(self):
-        if self.path in ("/dxf", "/section"):
+        path = urlparse(self.path).path
+        q = parse_qs(urlparse(self.path).query)
+        if path in ("/dxf", "/section", "/convert"):
             n = int(self.headers.get("Content-Length", 0))
             body = json.loads(self.rfile.read(n))
-            if self.path == "/dxf":
-                out = webapi.dxf_json(body["text"], body.get("plane", "xy"), body.get("unit", ""), str(body.get("y0", "")), str(body.get("z0", "")))
+            if path == "/dxf":
+                out = webapi.dxf_json(body["text"], body.get("plane", "xy"), body.get("unit", ""), str(body.get("y0", "")), str(body.get("z0", "")),
+                                      body.get("units", "SI"))
+            elif path == "/convert":
+                out = webapi.convert_json(json.dumps(body), q.get("to", ["SI"])[0])
             else:
-                out = webapi.section_json(json.dumps(body))
+                out = webapi.section_json(json.dumps(body), q.get("units", ["SI"])[0])
             return self._send(200, out.encode())
-        if self.path != "/run":
+        if path != "/run":
             return self._send(404, b'{"error":"not found"}')
         try:
             n = int(self.headers.get("Content-Length", 0))

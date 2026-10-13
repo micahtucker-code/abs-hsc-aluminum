@@ -55,17 +55,21 @@ def _bulge_points(p0, p1, bulge):
     return [(cx + r * math.cos(a0 + theta * i / n), cy + r * math.sin(a0 + theta * i / n)) for i in range(n + 1)]
 
 
-def guess_thickness(layer: str):
-    """Suggest a plate thickness (mm) from a layer name such as 'T8', 'PL_6.5', 'bottom-10mm'."""
+def guess_thickness(layer: str, units: str = "SI"):
+    """Suggest a plate thickness from a layer name such as 'T8', 'PL_6.5', 'bottom-10mm' (mm), or 'PL_0.25' (in., US)."""
     m = re.findall(r"(\d+(?:[.,]\d+)?)", layer)
     if not m:
         return None
     v = float(m[-1].replace(",", "."))
+    if (units or "SI").upper() == "US":
+        return v if 0.04 <= v <= 2.5 else None
     return v if 1.0 <= v <= 60.0 else None
 
 
-def parse(text: str, plane: str = "xy", unit: str | None = None, y0: float | None = None, z0: float | None = None) -> dict:
-    """Return {layers, segments, bbox, warnings, insunits, unit}. Segments are [layer, y1, z1, y2, z2] in mm.
+def parse(text: str, plane: str = "xy", unit: str | None = None, y0: float | None = None, z0: float | None = None,
+          units: str = "SI") -> dict:
+    """Return {layers, segments, bbox, warnings, insunits, unit}. Segments are [layer, y1, z1, y2, z2] in mm
+    (inches when units = "US"; the default drawing unit is then 'in').
 
     plane: two letters, horizontal then vertical drawing axis ('xy', 'xz', 'yz', 'yx', ...). unit: 'mm', 'cm', 'm',
     'in', 'ft' (default: the file's $INSUNITS, else mm). y0 / z0: drawing coordinates (in drawing units) of the
@@ -82,10 +86,12 @@ def parse(text: str, plane: str = "xy", unit: str | None = None, y0: float | Non
             except ValueError:
                 pass
             break
-    u = unit or insunits or "mm"
+    us = (units or "SI").upper() == "US"
+    u = unit or insunits or ("in" if us else "mm")
     if u not in UNIT_MM:
         raise ValueError(f"unit must be one of {sorted(UNIT_MM)}")
-    scale = UNIT_MM[u]
+    scale = UNIT_MM[u]  # drawing unit -> mm
+    out_div = 25.4 if us else 1.0  # mm -> output unit
 
     # --- entity records between ENTITIES and its ENDSEC ---
     ents, cur, inside = [], None, False
@@ -215,20 +221,21 @@ def parse(text: str, plane: str = "xy", unit: str | None = None, y0: float | Non
     vmin = min(min(s[2], s[4]) for s in segs)
     yo = 0.0 if y0 is None else y0
     zo = vmin if z0 is None else z0
-    out = [[s[0], (s[1] - yo) * scale, (s[2] - zo) * scale, (s[3] - yo) * scale, (s[4] - zo) * scale] for s in segs]
+    out = [[s[0], (s[1] - yo) * scale / out_div, (s[2] - zo) * scale / out_div, (s[3] - yo) * scale / out_div,
+            (s[4] - zo) * scale / out_div] for s in segs]
     layers: dict[str, dict] = {}
     for s in out:
         L = layers.setdefault(s[0], {"n": 0, "length_mm": 0.0})
         L["n"] += 1
         L["length_mm"] += math.hypot(s[3] - s[1], s[4] - s[2])
     for name, L in layers.items():
-        L["suggested_t_mm"] = guess_thickness(name)
+        L["suggested_t_mm"] = guess_thickness(name, units)
         L["length_mm"] = round(L["length_mm"], 1)
     hs = [v for s in out for v in (s[1], s[3])]
     vs_ = [v for s in out for v in (s[2], s[4])]
     warnings = [f"{n} x {t} skipped (not supported: explode blocks / convert curves to arcs, lines or polylines)"
                 if t.split(" ")[0] in UNSUPPORTED or "only usable" in t or "incomplete" in t or t == "POLYLINE mesh"
                 else f"{n} x {t} skipped" for t, n in warn_types.items()]
-    return {"layers": layers, "segments": [[s[0]] + [round(x, 3) for x in s[1:]] for s in out],
+    return {"layers": layers, "segments": [[s[0]] + [round(x, 4 if us else 3) for x in s[1:]] for s in out],
             "bbox": [min(hs), min(vs_), max(hs), max(vs_)], "warnings": warnings,
             "insunits": insunits, "unit": u, "y0_used": yo, "z0_used": zo}

@@ -5,6 +5,7 @@ from .report import run, markdown
 from .alloys import lookup
 from . import dxf as DXF
 from . import section as SEC
+from . import units as UN
 
 
 def run_json(text: str) -> str:
@@ -16,25 +17,34 @@ def run_json(text: str) -> str:
         return json.dumps({"ok": False, "data": {"error": f"{type(e).__name__}: {e}"}})
 
 
-def alloy_json(alloy: str, t: str) -> str:
+def alloy_json(alloy: str, t: str, units: str = "SI") -> str:
     try:
         a, pr = alloy.split("|")
-        return json.dumps({"ok": True, "data": lookup(a, pr, float(t))})
+        return json.dumps({"ok": True, "data": lookup(a, pr, float(t), units)})
     except Exception as e:
         return json.dumps({"ok": False, "data": {"error": str(e)}})
 
 
-def dxf_json(text: str, plane: str, unit: str, y0: str, z0: str) -> str:
-    """Parse a DXF; unit/y0/z0 may be empty strings for 'automatic'."""
+def dxf_json(text: str, plane: str, unit: str, y0: str, z0: str, units: str = "SI") -> str:
+    """Parse a DXF; unit/y0/z0 may be empty strings for 'automatic'. units: 'SI' (mm output) or 'US' (inches)."""
     try:
-        d = DXF.parse(text, plane or "xy", unit or None, float(y0) if y0 != "" else None, float(z0) if z0 != "" else None)
+        d = DXF.parse(text, plane or "xy", unit or None, float(y0) if y0 != "" else None, float(z0) if z0 != "" else None,
+                      units or "SI")
         return json.dumps({"ok": True, "data": d})
     except Exception as e:
         return json.dumps({"ok": False, "data": {"error": f"{type(e).__name__}: {e}"}})
 
 
-def section_json(text: str) -> str:
+def section_json(text: str, units: str = "SI") -> str:
     try:
-        return json.dumps({"ok": True, "data": SEC.compute(json.loads(text))})
+        return json.dumps({"ok": True, "data": SEC.compute(json.loads(text), units or "SI")})
+    except Exception as e:
+        return json.dumps({"ok": False, "data": {"error": f"{type(e).__name__}: {e}"}})
+
+
+def convert_json(text: str, to: str) -> str:
+    """Convert an input document between SI and US units (the GUI unit selector)."""
+    try:
+        return json.dumps({"ok": True, "data": UN.convert_inputs(json.loads(text), to)})
     except Exception as e:
         return json.dumps({"ok": False, "data": {"error": f"{type(e).__name__}: {e}"}})
