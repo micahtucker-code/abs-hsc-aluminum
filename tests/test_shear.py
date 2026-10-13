@@ -3,7 +3,15 @@ import json, math, unittest
 from abs_hsc_al import hullgirder as HG, pressures as P, shear as SH
 from abs_hsc_al.materials import AluminumMaterial
 from abs_hsc_al.report import run
-from test_section import _box
+
+
+def _box():
+    """1000 x 600 mm hollow box, t = 10 mm (I = 216017 cm4, m above N.A. = 3900 cm3)."""
+    return {"members": [
+        {"name": "top", "y1": -500, "z1": 600, "y2": 500, "z2": 600, "t_mm": 10},
+        {"name": "bottom", "y1": -500, "z1": 0, "y2": 500, "z2": 0, "t_mm": 10},
+        {"name": "side P", "y1": -500, "z1": 0, "y2": -500, "z2": 600, "t_mm": 10},
+        {"name": "side S", "y1": 500, "z1": 0, "y2": 500, "z2": 600, "t_mm": 10}]}
 
 M = AluminumMaterial("test", 200, 275, 120, 215)
 V = P.Vessel(L=70, Lw=65, B=10, Bw=4, D=5, d=1.5, delta_t=300, V=25, service="coastal", n_hulls=2, B_cl=6.0)
