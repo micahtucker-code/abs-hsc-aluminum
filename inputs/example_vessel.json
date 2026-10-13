@@ -1,0 +1,64 @@
+{
+ "vessel": {
+  "L": 24.0,
+  "Lw": 22.5,
+  "B": 6.0,
+  "Bw": 5.2,
+  "D": 3.0,
+  "d": 1.1,
+  "delta_t": 60.0,
+  "V": 30.0,
+  "tau": 4.0,
+  "beta_cg": 15.0,
+  "service": "coastal"
+ },
+ "material": {
+  "name": "5083-H116 plate, 3-12.5 mm",
+  "sigma_y_unwelded": 215,
+  "sigma_u_unwelded": 305,
+  "sigma_y_welded": 165,
+  "sigma_u_welded": 276,
+  "source": "ABS Part 2 2-5-5 T1B / 2-4-5 T2"
+ },
+ "plates": [
+  {
+   "id": "bottom plate",
+   "location": "bottom",
+   "s_mm": 400,
+   "l_mm": 1200,
+   "t_mm": 8.0,
+   "loads": {
+    "bottom_slam": {
+     "calc": "bottom_slam_cg",
+     "FD": 0.75
+    },
+    "bottom_hydro": {
+     "calc": "hydro_bottom"
+    }
+   }
+  }
+ ],
+ "stiffeners": [
+  {
+   "id": "bottom longitudinal",
+   "member_case": "bottom_long_slam",
+   "profile": "tee",
+   "hw_mm": 80,
+   "tw_mm": 5,
+   "bf_mm": 40,
+   "tf_mm": 6,
+   "t_plate_mm": 8,
+   "spacing_mm": 400,
+   "l_m": 1.2,
+   "load": {
+    "calc": "bottom_slam_cg",
+    "FD": 0.75
+   }
+  }
+ ],
+ "hull_girder": {
+  "SM_deck_cm3": 9000,
+  "SM_bottom_cm3": 9000,
+  "I_cm4": 600000
+ }
+}

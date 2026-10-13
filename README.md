@@ -1,0 +1,38 @@
+# abs_hsc_al - aluminum scantling checker (ABS HSC Rules, July 2022)
+
+Checks aluminum high-speed-craft scantlings against ABS Rules for Building and Classing
+High Speed Craft (July 2022), Part 3, Chapter 2. Pure Python 3, no dependencies.
+
+    python -m abs_hsc_al inputs/example_vessel.json --md report.md --json report.json
+    python -m unittest discover -s tests -t .
+
+**GUI:** `python -m abs_hsc_al.gui` opens a form in your browser (local only, nothing leaves your machine). Enter vessel, alloy, plates, stiffeners and midship section properties, press *Run checks*, and download the report. *Save JSON* / *Open JSON* exchange files with the command line tool.
+
+Exit code is 0 when every check passes, 1 otherwise.
+
+## What it checks
+| Area | Rule | Notes |
+|---|---|---|
+| Design pressures | 3-2-2 | bottom/side slamming, hydrostatic, fore end, decks, superstructure, tanks, watertight, wet deck, ncg |
+| Plating | 3-2-3/1.3, 1.5 | lateral thickness, 0.012 s, minimum thickness, uniaxial buckling |
+| Stiffeners / girders | 3-2-4/1.3, 1.5.1, 1.5.6, 1.9 | SM, I, web thickness, web/flange proportions, column buckling |
+| Hull girder | 3-2-1 | SM and I (all craft); wave/still-water/slam moments for L >= 61 m; catamaran loads |
+
+## Inputs you must supply (not guessed)
+1. **Aluminum properties** (`material`): use the built-in library, e.g.
+   `"material": {"alloy": "5083-H116", "product": "plate", "thickness_mm": 8}`, or type your own four values.
+   The library (`alloys.py`) holds unwelded minimums from ABS Part 2 2-5-5 (Tables 1B, 2, 3, 4) and as-welded
+   minimums from 2-4-5/17 Table 2, by thickness band. Combinations without a published as-welded value
+   (5059, 5083-H128, 6082, ...) are not included; enter those by hand. The GUI has a *Fill from ABS tables* button.
+   One material applies to the whole run: use the lowest-strength band you have in the structure, or run twice.
+2. **Graph-based factors**: FD, Kv, Fv, wet-deck F1, hull-girder M, shear F1/F2. Give a direct value
+   (e.g. `"FD": 0.62`) or a digitised curve under `curves` (see `figures.py`). A missing factor stops
+   with an error naming the figure.
+3. Section properties of the hull girder (`SM_deck_cm3`, `SM_bottom_cm3`, `I_cm4`) from your own midship section.
+
+## Input format
+See `inputs/example_vessel.json`. Units: m, mm, tonnes, knots, kN/m2, N/mm2. Pressures can be given as a
+number or as `{"calc": "bottom_slam_cg", "FD": 0.75}` etc. (see `report.resolve_pressure`).
+
+See `RULE_REFERENCE.md` for clause mapping, interpretation choices and what is not implemented.
+This tool supports a designer's check; it is not an ABS approval.
