@@ -149,5 +149,15 @@ class Dxf(unittest.TestCase):
         self.assertAlmostEqual(r2["A_cm2"], 2200 * 10 / 100)
 
 
+class SampleFiles(unittest.TestCase):
+    def test_crossdeck_sample_dxf(self):
+        with open("inputs/example_crossdeck.dxf", encoding="utf-8") as f:
+            d = dxf.parse(f.read())
+        lay = {"T6_DECK": {"t_mm": 6}, "T8_WETDECK": {"t_mm": 8}, "T6_BHD": {"t_mm": 6}}
+        r = SC.compute({"dxf": {"layers": lay, "segments": d["segments"]}})
+        self.assertAlmostEqual(r["A_cm2"], (8000 * 6 + 8000 * 8 + 3 * 1000 * 6) / 100)
+        self.assertAlmostEqual(r["shear"]["web_area_cm2"], 180.0)
+
+
 if __name__ == "__main__":
     unittest.main()
