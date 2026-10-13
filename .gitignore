@@ -1,6 +1,7 @@
 __pycache__/
 *.pyc
 pyodide_core/
-web/
-report.*
+/web/
+/report.md
+/report.json
 *.tar.gz
