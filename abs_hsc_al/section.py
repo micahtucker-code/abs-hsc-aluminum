@@ -134,8 +134,9 @@ def compute(sec: dict) -> dict:
     for l in allx:
         A, zc, I = _seg(l["y1"], l["z1"], l["y2"], l["z2"], l["t"])
         on_cl = abs(l["y1"]) < 1e-6 and abs(l["y2"]) < 1e-6
-        k = (2.0 if (mirror and not on_cl) else 1.0) * l["eff"]
-        elems.append({"group": l["group"], "A": A * k, "z": zc, "I": I * k})
+        mf = 2.0 if (mirror and not on_cl) else 1.0
+        k = mf * l["eff"]
+        elems.append({"group": l["group"], "A": A * k, "z": zc, "I": I * k, "line": l, "k": k, "mf": mf, "on_cl": on_cl})
         geom.append([round(l["y1"], 2), round(l["z1"], 2), round(l["y2"], 2), round(l["z2"], 2),
                      round(l["t"], 3), l["kind"], l["eff"]])
         if mirror and not on_cl:
@@ -173,7 +174,13 @@ def compute(sec: dict) -> dict:
         dist = sum(e["A"] * (e["z"] - zna) ** 2 for e in elems if e["group"] == g["name"])
         rows.append({"name": g["name"], "A_cm2": g["A_mm2"] / 100.0, "z_mm": zc,
                      "I_own_cm4": g["I_own"] / 1e4, "I_total_cm4": (g["I_own"] + dist) / 1e4})
+    z_lev = float(sec["shear_level_z_mm"]) if "shear_level_z_mm" in sec else zna
+    shear = _shear_geometry(elems, lumps, mirror, z_lev, zna)
+    shear["web_area_cm2"] = sum(e["k"] * e["line"]["t"] * abs(e["line"]["z2"] - e["line"]["z1"])
+                                for e in elems if "line" in e and e["line"]["kind"] == "plate"
+                                and abs(e["line"]["z2"] - e["line"]["z1"]) > abs(e["line"]["y2"] - e["line"]["y1"])) / 100.0
     return {
+        "shear": shear,
         "A_cm2": A / 100.0, "z_NA_mm": zna, "I_cm4": I / 1e4,
         "z_deck_mm": z_deck, "z_bottom_mm": z_bot,
         "SM_deck_cm3": I / (z_deck - zna) / 1e3, "SM_bottom_cm3": I / (zna - z_bot) / 1e3,
@@ -181,3 +188,35 @@ def compute(sec: dict) -> dict:
         "skipped_layers": skipped, "n_lines": len(allx), "n_stiffener_lines": len(allx) - len(lines),
         "bbox": [min(ys + [-y for y in ys] if mirror else ys), min(zs), max(ys + [-y for y in ys] if mirror else ys), max(zs)] if ys else [0, min(zs), 0, max(zs)],
     }
+
+
+def _shear_geometry(elems, lumps, mirror, z_lev, zna):
+    """First moment m (cm3) about the neutral axis of the effective area above the level z_lev, and the shear
+    webs (plate members that cross the level): count, total thickness, thinnest, any on the centreline."""
+    m = 0.0
+    webs_t = 0.0
+    n_webs = 0.0
+    t_min = None
+    on_cl_web = False
+    for e in elems:
+        l = e.get("line")
+        if not l:
+            continue
+        z1, z2, t, k = l["z1"], l["z2"], l["t"], e["k"]
+        lo, hi = min(z1, z2), max(z1, z2)
+        if hi <= z_lev:
+            continue
+        frac = 1.0 if lo >= z_lev else (hi - z_lev) / (hi - lo)
+        zc_top = (max(lo, z_lev) + hi) / 2
+        length = math.hypot(l["y2"] - l["y1"], z2 - z1)
+        m += k * t * length * frac * (zc_top - zna)
+        if l["kind"] == "plate" and lo < z_lev < hi:
+            webs_t += k * t
+            n_webs += e["mf"]
+            t_min = t if t_min is None else min(t_min, t)
+            on_cl_web = on_cl_web or e["on_cl"]
+    for x in lumps:
+        if x["z"] > z_lev:
+            m += x["A"] * x["eff"] * (2.0 if (mirror and abs(x["y"]) > 1e-6) else 1.0) * (x["z"] - zna)
+    return {"z_level_mm": z_lev, "m_cm3": m / 1e3, "web_t_sum_mm": webs_t, "n_webs": n_webs,
+            "t_min_mm": t_min, "centreline_web": on_cl_web}

@@ -168,5 +168,24 @@
     }
    }
   ]
+ },
+ "hull_shear": {
+  "stations": [
+   {
+    "name": "0.25L (placeholder F1/F2)",
+    "x_over_L": 0.25,
+    "F1": 0.7,
+    "F2": 0.7,
+    "Fsw_kN": 0
+   },
+   {
+    "name": "0.75L (placeholder F1/F2)",
+    "x_over_L": 0.75,
+    "F1": 0.7,
+    "F2": 0.7,
+    "Fsw_kN": 0
+   }
+  ],
+  "combined_sum": true
  }
 }

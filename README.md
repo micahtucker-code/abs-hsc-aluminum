@@ -20,7 +20,8 @@ Exit code is 0 when every check passes, 1 otherwise.
 | Design pressures | 3-2-2 | bottom/side slamming, hydrostatic, fore end, decks, superstructure, tanks, watertight, wet deck, ncg |
 | Plating | 3-2-3/1.3, 1.5 | lateral thickness, 0.012 s, minimum thickness, uniaxial buckling |
 | Stiffeners / girders | 3-2-4/1.3, 1.5.1, 1.5.6, 1.9 | SM, I, web thickness, web/flange proportions, column buckling |
-| Hull girder | 3-2-1 | SM and I (all craft); wave/still-water/slam moments for L >= 61 m; catamaran loads |
+| Hull girder | 3-2-1 | SM and I (all craft); wave/still-water/slam moments for L >= 61 m; shear stress (1.9.4); catamaran loads and cross-structure stresses (3.3, 3.5.3) |
+| Cross structure | 3-2-A2 | Transverse bending and shear, centre of torsional rotation and element-by-element torsion check |
 
 ## Inputs you must supply (not guessed)
 1. **Aluminum properties** (`material`): use the built-in library, e.g.
@@ -51,3 +52,10 @@ The *Midship section properties* block computes area, neutral axis, I and the de
 - **DXF import:** export the section as an ASCII DXF (LINE, LWPOLYLINE with arcs, POLYLINE, ARC and CIRCLE are read; SPLINE, ELLIPSE and INSERT blocks are reported and skipped, so explode blocks first). Pick the drawing plane and units, then give each layer a thickness (layer names such as `T8` or `PL_10` are suggested automatically). Layers without a thickness are listed in a warning and left out. A sample is in `inputs/example_section.dxf`.
 - **PDF drawings** are not read directly; convert to DXF in your CAD package.
 - The report adds section 11.1 with the properties table, a drawing of the idealised section and a per-group contribution table. Limits: no plate-buckling effective-width reduction, no shear lag, a single alloy.
+
+
+## Hull girder shear and global loads (v0.6)
+
+- **Shear (3-2-1/1.9):** for each station give the Rule distribution factors F1 and F2 (read from the Rule figures) and, if known, the still-water shear force Fsw. The program computes Fwp, Fwn (1.9.2) and Fsl (1.9.3), then the shear stress fs = F m / (2 ts I) for Fsw+Fw, for Fsl, and for the combined sum of 1.9.1, against 11.0/Q kN/cm2. The first moment m and the shear-web thickness come from the midship section (webs crossing the neutral axis) or can be typed in. Fsw left empty is treated as zero and flagged in the report. A continuous centreline web triggers a note that 1.9.5 applies.
+- **Global loads sheet (report 11.2):** ncg, (1+ncg), the bending moments of 1.1.2 (L >= 61 m) and, for two hulls, Mtb, Mtt and Qt.
+- **Cross structure (3-2-1/3.5, 3-2-A2):** enter SMt and At, or supply a cross-structure `section` in the JSON file (SMt from its smaller modulus, At from its vertical web area), and optionally the connecting elements (x from the FP, span, I, SM, web area). Stresses are compared with 0.66, 0.75 and 0.38 of the unwelded yield.

@@ -50,6 +50,12 @@ td.n{text-align:right;font-variant-numeric:tabular-nums}
 <div style="overflow-x:auto"><table id="mtab"><thead><tr id="mhead"></tr></thead><tbody></tbody></table></div><button onclick="addMember()">+ Member</button>
 <p style="margin-top:10px"><button class="p" onclick="calcSection()">Calculate section</button></p><div id="secOut"></div></section>
 <section><h2>Hull girder (midship section)</h2><p class="hint">Uses the midship section calculated above. Type values here only to override them (all three are needed); leave all blank and without a section to skip the hull girder check.</p><div class="grid" id="hg"></div></section>
+<section><h2>Hull girder shear (3-2-1/1.9)</h2><p class="hint">Required for craft of 61 m and over (for twin-hull craft under 61 m only with unusual or concentrated loads). For each station enter the Rule distribution factors F1 and F2 (read from 3-2-1/1.9.2 Figures 3 and 4) and, if you have it, the still-water shear force Fsw. If you leave Fsw empty it is taken as zero and the report says so. The first moment m and the side-shell thickness come from the midship section above unless you enter them here.</p>
+<div class="grid"><label>First moment m above the neutral axis (cm³, optional)<input id="shM" type="number" step="any"></label><label>Side shell thickness ts (mm, optional)<input id="shTs" type="number" step="any"></label><label>Number of side shells (default 2)<input id="shN" type="number" step="any"></label><label>Add the 1.9.1 combined (Fsw+Fw+Fsl) row<input type="checkbox" id="shComb" checked></label></div>
+<table id="shtab" style="margin-top:8px"><thead><tr><th>Station name</th><th>x/L</th><th>F1</th><th>F2</th><th>Fsw (kN, optional)</th><th></th></tr></thead><tbody></tbody></table><button onclick="addRowTo('shtab',SHC)">+ Station</button></section>
+<section><h2>Multi-hull cross structure (3-2-1/3.3, 3.5, 3-2-A2)</h2><p class="hint">For vessels with two hulls (set number of hulls = 2 and the hull centreline spacing above). The program lists Mtb, Mtt and Qt and checks the cross structure when you enter its offered transverse section modulus SMt (cm²-m) and shear area At (cm²). Add the connecting elements (frames or beams) to distribute the pitch connecting moment Mtt by 3-2-A2 and check each element in bending and shear.</p>
+<div class="grid"><label>Offered SMt of the cross deck (cm²-m)<input id="csSM" type="number" step="any"></label><label>Offered shear area At (cm²)<input id="csAt" type="number" step="any"></label></div>
+<table id="cstab" style="margin-top:8px"><thead><tr><th>Element</th><th>x from FP (m)</th><th>Span L (m)</th><th>I (cm⁴)</th><th>SM (cm³)</th><th>Web area Aw (cm²)</th><th></th></tr></thead><tbody></tbody></table><button onclick="addRowTo('cstab',CSC)">+ Element</button></section>
 <p class="hint" style="margin-top:24px">__FOOTER__</p></main>
 <div id="rv" hidden style="position:fixed;inset:0;background:var(--bg);z-index:10;display:flex;flex-direction:column"><div style="padding:8px 16px;border-bottom:1px solid var(--line);background:var(--card);display:flex;gap:8px;align-items:center"><b style="flex:1">Calculation report preview</b><button class="p" onclick="printReport()">Print / Save as PDF</button><button onclick="dlReportHtml()">Download HTML</button><button onclick="closeReport()">Close</button></div><iframe id="rvf" style="flex:1;border:0;background:#fff"></iframe></div>
 <script>
@@ -118,9 +124,10 @@ function collect(){
  {const rows=readStations();if(rows.length){data.stations={rows};if($("stFD").value!=="")data.stations.FD=+$("stFD").value}}
  if(Object.keys(hg).length){if(!("SM_deck_cm3"in hg&&"SM_bottom_cm3"in hg&&"I_cm4"in hg))throw new Error("Hull girder needs SM deck, SM bottom and I (or leave all blank).");data.hull_girder=hg}
  {const sc=secCollect();if(sc)data.section=sc}
+ collectShear(data)
  return data}
 function setVals(root,d){root.querySelectorAll("[data-k]").forEach(i=>{const v=d[i.dataset.k];if(v===undefined)return;if(i.type==="checkbox")i.checked=!!v;else i.value=v})}
-function populate(d){setVals($("project"),d.project||{});setVals($("vessel"),d.vessel||{});setVals($("mat"),d.material||{});$("plates").innerHTML="";$("stiffs").innerHTML="";(d.plates||[]).forEach(addPlate);(d.stiffeners||[]).forEach(addStiff);setVals($("hg"),d.hull_girder||{});$("sttab").tBodies[0].innerHTML="";((d.stations||{}).rows||[]).forEach(addStation);$("stFD").value=(d.stations||{}).FD??"";syncStn();populateSection(d.section)}
+function populate(d){setVals($("project"),d.project||{});setVals($("vessel"),d.vessel||{});setVals($("mat"),d.material||{});$("plates").innerHTML="";$("stiffs").innerHTML="";(d.plates||[]).forEach(addPlate);(d.stiffeners||[]).forEach(addStiff);setVals($("hg"),d.hull_girder||{});$("sttab").tBodies[0].innerHTML="";((d.stations||{}).rows||[]).forEach(addStation);$("stFD").value=(d.stations||{}).FD??"";syncStn();populateSection(d.section);populateShear(d)}
 function populateSection(s){$("mtab").tBodies[0].innerHTML="";DXF=null;DXFTEXT="";s=s||{};$("secMirror").checked=!!s.mirror;$("secDeck").value=s.deck_z_mm??"";$("secBase").value=s.base_z_mm??"";(s.members||[]).forEach(addMember);if(s.dxf){DXF={layers:s.dxf.layers,segments:s.dxf.segments,meta:s.dxf.meta||{file:"drawing.dxf",unit:"mm",plane:"xy",bbox:[0,0,0,0],warnings:[]}};if(!s.dxf.meta){const hs=s.dxf.segments.flatMap(a=>[a[1],a[3]]),vs=s.dxf.segments.flatMap(a=>[a[2],a[4]]);DXF.meta.bbox=[Math.min(...hs),Math.min(...vs),Math.max(...hs),Math.max(...vs)]}}renderDxf();$("secOut").innerHTML=""}
 async function fillAlloy(){const {ok,data:j}=await API.alloy($("alloy").value,$("alt").value);
  if(!ok){$("amsg").textContent=j.error;return}$("amsg").textContent="Source: "+j.source;setVals($("mat"),j)}
@@ -172,5 +179,20 @@ async function calcSection(){const out=$("secOut");let s;try{s=secCollect()}catc
  const {ok,data:r}=await API.section(s);if(!ok){out.innerHTML=`<div class="warn">${r.error}</div>`;return}
  const sk=Object.entries(r.skipped_layers||{});
  out.innerHTML=(sk.length?`<div class="warn">Left out of the section (no thickness): ${sk.map(([k,n])=>_esc(k)+" ("+n+" segments)").join(", ")}</div>`:"")+`<table style="max-width:520px"><tr><td>Effective area</td><td class="n">${r.A_cm2.toFixed(1)} cm²</td></tr><tr><td>Neutral axis above baseline</td><td class="n">${r.z_NA_mm.toFixed(1)} mm</td></tr><tr><td>Moment of inertia I</td><td class="n">${r.I_cm4.toFixed(0)} cm⁴</td></tr><tr><td>Section modulus at deck</td><td class="n">${r.SM_deck_cm3.toFixed(0)} cm³</td></tr><tr><td>Section modulus at bottom</td><td class="n">${r.SM_bottom_cm3.toFixed(0)} cm³</td></tr></table><div style="margin-top:8px;border:1px solid var(--line);border-radius:6px;padding:6px;background:#fff">${sectionSVG(r,{maxh:"380px"})}</div><p class="hint">Check the picture against your drawing: stiffeners should sit on the inside, and the red dashed line is the neutral axis.</p>`}
+
+// ---- shear and cross structure
+const SHC=[["name","Name","text",110],["x_over_L","x/L"],["F1","F1"],["F2","F2"],["Fsw_kN","Fsw"]];
+const CSC=[["name","Name","text",110],["x_m","x"],["span_m","L"],["I_cm4","I"],["SM_cm3","SM"],["Aw_cm2","Aw"]];
+function addRowTo(id,cols,d){d=d||{};const tr=document.createElement("tr");tr.innerHTML=cols.map(([k,l,t,w])=>`<td><input data-k="${k}" type="${t||"number"}" step="any" value="${d[k]??""}" style="min-width:${t==="text"?w:70}px"></td>`).join("")+`<td><button class="x" onclick="this.closest('tr').remove()">x</button></td>`;$(id).tBodies[0].appendChild(tr)}
+function readRowsOf(id,label){return [...$(id).tBodies[0].rows].map((r,i)=>{const o={};r.querySelectorAll("[data-k]").forEach(x=>{if(x.value!=="")o[x.dataset.k]=x.type==="number"?+x.value:x.value});return o}).filter(o=>Object.keys(o).length)}
+function collectShear(data){
+ const st=readRowsOf("shtab");if(st.length){st.forEach((o,i)=>{if(o.F1===undefined||o.F2===undefined)throw new Error(`Hull shear station ${i+1}: F1 and F2 are required.`)});
+  const hs={stations:st,combined_sum:$("shComb").checked};if($("shM").value!=="")hs.m_cm3=+$("shM").value;if($("shTs").value!=="")hs.ts_mm=+$("shTs").value;if($("shN").value!=="")hs.n_webs=+$("shN").value;data.hull_shear=hs}
+ const el=readRowsOf("cstab"),sm=$("csSM").value,at=$("csAt").value;
+ if(el.length||sm!==""||at!==""){const cs={};if(sm!=="")cs.SMt_cm2m=+sm;if(at!=="")cs.At_cm2=+at;if(el.length)cs.elements=el;
+  if(!("SMt_cm2m"in cs&&"At_cm2"in cs))throw new Error("Cross structure needs both the section modulus SMt and the shear area At.");data.cross_structure=cs}}
+function populateShear(d){$("shtab").tBodies[0].innerHTML="";$("cstab").tBodies[0].innerHTML="";const hs=d.hull_shear||{},cs=d.cross_structure||{};
+ (hs.stations||[]).forEach(o=>addRowTo("shtab",SHC,o));$("shM").value=hs.m_cm3??"";$("shTs").value=hs.ts_mm??"";$("shN").value=hs.n_webs??"";$("shComb").checked=hs.combined_sum!==false;
+ (cs.elements||[]).forEach(o=>addRowTo("cstab",CSC,o));$("csSM").value=cs.SMt_cm2m??"";$("csAt").value=cs.At_cm2??""}
 addPlate();
 </script></body></html>

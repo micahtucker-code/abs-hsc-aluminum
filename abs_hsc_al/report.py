@@ -13,6 +13,8 @@ from .plating import check_plate, check_plate_buckling, PlateResult
 from .stiffeners import Section, effective_plate_width, check_stiffener
 from .hullgirder import check_hull_girder
 from . import section as SEC
+from . import shear as SH
+from . import hullgirder as HGM
 
 
 def resolve_pressure_detail(spec, v: P.Vessel, fac: Factors, stations=None):
@@ -158,6 +160,7 @@ def run(data: dict) -> dict:
         results += check_hull_girder(v, mat, h["SM_deck_cm3"], h["SM_bottom_cm3"], h["I_cm4"],
                                      h.get("Cb"), h.get("Mswh_kNm"), h.get("Msws_kNm"))
         hull_used = h
+    global_loads = _global_loads(data, v, mat, section, hull_used, results)
     return {"vessel": vd, "ncg": P.ncg(v), "material": {"name": mat.name, "sigma_y_design": mat.sigma_y_design,
             "Q": mat.Q, "q_a": mat.q_a, "source": mat.source,
             "sigma_y_unwelded": mat.sigma_y_unwelded, "sigma_u_unwelded": mat.sigma_u_unwelded,
@@ -167,9 +170,77 @@ def run(data: dict) -> dict:
                         "ncg_formula": P.ncg_formula(v), "ncg_used": P.ncg(v), "ncg_override": v.ncg_override},
             "version": __version__,
             "station_table": station_table(data, v, stns, fac),
-            "section": section, "hull_girder_used": hull_used,
+            "section": section, "hull_girder_used": hull_used, "global_loads": global_loads,
             "operating_limits": operating_limits(v),
             "results": [dict(asdict(r), utilisation=r.utilisation, passed=r.passed) for r in results]}
+
+
+def _global_loads(data, v, mat, section, hull_used, results) -> dict:
+    """Global load summary plus the shear (3-2-1/1.9) and multi-hull cross-structure (3-2-1/3, 3-2-A2) checks.
+    Appends check rows to `results` and returns the data for the report sheets."""
+    out = {"ncg": P.ncg(v), "n1": max(1.0 + P.ncg(v), HGM.min_1_plus_ncg(v.delta_t)), "moments": None, "shear": None,
+           "cross": None, "notes": []}
+    h = hull_used or {}
+    cb = h.get("Cb") if h.get("Cb") is not None else (v.Cb if v.Cb is not None else v.Cb_calc)
+    if v.L >= 61.0:
+        m = HGM.moments_61m_plus(v, cb)
+        if h.get("Mswh_kNm") is not None:
+            m["Mswh"] = h["Mswh_kNm"]
+        if h.get("Msws_kNm") is not None:
+            m["Msws"] = h["Msws_kNm"]
+        m["Mt"] = max(m["Mswh"] + m["Mwh"], abs(m["Msws"]) + m["Mws"], m["Msl"])
+        out["moments"] = m
+    hs = data.get("hull_shear")
+    if hs:
+        I = hs.get("I_cm4", h.get("I_cm4"))
+        if I is None:
+            raise ValueError("hull_shear needs the hull girder moment of inertia: give a midship section, hull girder I_cm4, or hull_shear.I_cm4")
+        geom = (section or {}).get("shear")
+        m_cm3 = hs.get("m_cm3", geom["m_cm3"] if geom else None)
+        if "ts_mm" in hs:
+            web_t = hs["ts_mm"] * hs.get("n_webs", 2)
+        elif geom and geom["web_t_sum_mm"] > 0:
+            web_t = geom["web_t_sum_mm"]
+        else:
+            web_t = None
+        if m_cm3 is None or web_t is None:
+            raise ValueError("hull_shear needs the first moment m and the side-shell thickness: give a midship section or hull_shear.m_cm3 and ts_mm")
+        rows_res, rows = SH.check_hull_shear(v, mat, cb, I, m_cm3, web_t, hs.get("stations", []), hs.get("combined_sum", True))
+        results += rows_res
+        out["shear"] = {"rows": rows, "I_cm4": I, "m_cm3": m_cm3, "web_t_mm": web_t, "allow": HGM.shear_allowable(mat),
+                        "geometry": geom, "from_section": "m_cm3" not in hs and bool(geom),
+                        "required_by_rule": v.L >= 61.0 and v.n_hulls < 2}
+        if not any(r["Fsw_given"] for r in rows):
+            out["notes"].append("Still-water shear force Fsw was not entered and is taken as zero in the shear checks.")
+        if geom and geom.get("centreline_web"):
+            out["notes"].append("The section has a continuous longitudinal web on the centreline: 3-2-1/1.9.5 applies and shear flow must be determined by an acceptable method; the single-cell formula used here does not apply.")
+        if v.L < 61.0:
+            out["notes"].append("Hull girder shear is required only for craft of 61 m and over (3-2-1/1.9); evaluated here at the designer's request.")
+    cs = data.get("cross_structure")
+    if cs:
+        if v.n_hulls < 2 or not v.B_cl:
+            raise ValueError("cross_structure needs a multi-hull vessel (n_hulls >= 2) with the hull centreline spacing B_cl")
+        cross = {}
+        csec = None
+        if cs.get("section"):
+            csec = SEC.compute(cs["section"])
+            cross["section"] = csec
+        SMt = cs.get("SMt_cm2m", min(csec["SM_deck_cm3"], csec["SM_bottom_cm3"]) / 100.0 if csec else None)
+        At = cs.get("At_cm2", csec["shear"]["web_area_cm2"] if csec else None)
+        if SMt is None or At is None:
+            raise ValueError("cross_structure needs SMt_cm2m and At_cm2, or a cross-structure section")
+        rr, info = SH.cross_structure_checks(v, mat, SMt, At)
+        results += rr
+        cross.update(info)
+        cross["from_section"] = csec is not None and "SMt_cm2m" not in cs
+        if cs.get("elements"):
+            rr, tors = SH.torsion_elements(info["Mtt"], cs["elements"], mat)
+            results += rr
+            cross["torsion"] = tors
+        out["cross"] = cross
+    elif v.n_hulls >= 2 and v.B_cl:
+        out["cross"] = {**HGM.catamaran_loads(v.delta_t, v.B_cl, v.L, P.ncg(v)), "allow": HGM.catamaran_allowables(mat), "checked": False}
+    return out
 
 
 def markdown(rep: dict) -> str:

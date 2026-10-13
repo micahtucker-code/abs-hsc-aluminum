@@ -39,3 +39,12 @@ catamaran cross-structure stress analysis (only loads and allowables), hydrofoil
 ## Midship section calculator (not a Rule item)
 
 3-2-1 gives SM and I requirements; how the provided values are calculated is left to the designer. The calculator idealises the section as thin straight members (A = l t; own inertia t l^3 sin^2(a)/12 + l t^3 cos^2(a)/12 about the horizontal centroidal axis) and uses the parallel-axis theorem about the neutral axis. SM deck = I/(z deck - z NA), SM bottom = I/(z NA - z base); the deck and baseline default to the highest and lowest points of the drawn members unless given. Stiffener webs start at the plate surface and flanges are centred (tee) or one-sided (angle) at the web tip. Plating is not reduced for buckling or shear lag; the designer should confirm that this is acceptable to the reviewing body, or reduce the effectiveness of compressed panels.
+
+
+## Shear and cross-structure interpretations (v0.6)
+
+1. 1.9.1 asks for the maximum algebraic sum of Fsw, Fw and Fsl, while 1.9.4 gives two separate equations (Fsw+Fw and Fsl alone, "the greater of"). Both are evaluated and the 1.9.1 sum is added as a third row (switch off with `combined_sum: false`).
+2. Fsl uses (ncg + 1) exactly as printed in 1.9.3, without the Table 1 minimum that 1.1.2(d) applies to the slamming moment.
+3. fs = F m / (2 ts I) is generalised to F m / (sum of shear-web thicknesses x I), so two equal side shells reproduce the printed form and a catamaran with four webs is handled. All plate members crossing the neutral axis count as shear webs; stiffener webs do not.
+4. For the cross structure, A2/5.5 and A2/5.7 stresses are compared with sigma_ab = 0.75 sigma_y and tau_a = 0.38 sigma_y; the Rule does not combine them with the transverse bending stress of A2/1 and this program does not either.
+5. Torsion elements are treated as fixed-guided beams (BM = P L / 2) as printed in A2/5.3, and all of Mtt is taken by the listed elements.

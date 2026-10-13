@@ -113,7 +113,7 @@ def wave_shear(L: float, B: float, Cb: float, F: float, positive: bool = True) -
 def catamaran_loads(delta_t: float, B_cl: float, L: float, ncg: float) -> dict:
     """3-2-1/3.3."""
     n1 = max(1.0 + ncg, min_1_plus_ncg(delta_t))
-    return {"Mtb": 2.5 * delta_t * B_cl * n1, "Mtt": 1.25 * delta_t * L * n1, "Qt": 2.5 * delta_t * n1}
+    return {"Mtb": 2.5 * delta_t * B_cl * n1, "Mtt": 1.25 * delta_t * L * n1, "Qt": 2.5 * delta_t * n1, "n1": n1}
 
 
 def catamaran_allowables(mat: AluminumMaterial) -> dict:
