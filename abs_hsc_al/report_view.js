@@ -34,6 +34,22 @@ function sectionSVG(r,opt){opt=opt||{};const g=r.geometry||[],bb=r.bbox,W0=bb[2]
  +`<line x1="${x0}" y1="${-r.z_deck_mm}" x2="${x0+w}" y2="${-r.z_deck_mm}" stroke="#667085" stroke-width="${sw*0.6}" stroke-dasharray="${sw*3} ${sw*5}"/><text x="${x0+fs*0.3}" y="${-r.z_deck_mm-fs*0.4}" font-size="${fs}" fill="#667085" font-family="sans-serif">deck z = ${r.z_deck_mm.toFixed(0)}</text>`
  +`<line x1="${x0}" y1="${-r.z_bottom_mm}" x2="${x0+w}" y2="${-r.z_bottom_mm}" stroke="#667085" stroke-width="${sw*0.6}" stroke-dasharray="${sw*3} ${sw*5}"/><text x="${x0+fs*0.3}" y="${-r.z_bottom_mm+fs*1.1}" font-size="${fs}" fill="#667085" font-family="sans-serif">baseline z = ${r.z_bottom_mm.toFixed(0)}</text>`;
  return `<svg viewBox="${x0} ${y0} ${w} ${h}" style="width:100%;max-height:${opt.maxh||"420px"};background:${opt.bg||"transparent"}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Midship section">${lines}${lumps}${ax}</svg>`}
+function opChart(OL,D,V){const W=680,H=380,L=62,R=24,T=34,B=64,pw=W-L-R,ph=H-T-B,hmax=5,vst=V.V<=40?5:V.V<=100?10:20,vmax=Math.ceil(V.V*1.1/vst)*vst||10;
+ const k0=12*D.h13/D.NhBw+1,spd=h=>Math.min(V.V,V.V*Math.sqrt(k0/(12*h/D.NhBw+1)));
+ const X=h=>L+h/hmax*pw,Y=v=>T+ph-v/vmax*ph,F=_M_FT;
+ let pts=[];for(let h=0;h<=hmax+1e-9;h+=0.05)pts.push(X(h).toFixed(1)+","+Y(spd(h)).toFixed(1));
+ let g="";for(let v=0;v<=vmax+1e-9;v+=vst){g+=`<line x1="${L}" y1="${Y(v)}" x2="${L+pw}" y2="${Y(v)}" stroke="#d0d5dd" stroke-width="0.8"/><text x="${L-8}" y="${Y(v)+4}" text-anchor="end" font-size="11" fill="#333">${_n(v,0)}</text>`}
+ for(let h=0;h<=hmax;h+=0.5){const big=Number.isInteger(h);g+=`<line x1="${X(h)}" y1="${T}" x2="${X(h)}" y2="${T+ph}" stroke="#e4e7ec" stroke-width="0.8"/>`+(big?`<text x="${X(h)}" y="${T+ph+16}" text-anchor="middle" font-size="11" fill="#333">${h}</text><text x="${X(h)}" y="${T+ph+30}" text-anchor="middle" font-size="9.5" fill="#667085">${_n(h*F,1)} ft</text>`:"")}
+ const dots=OL.filter(o=>o.h13<=hmax).map(o=>`<circle cx="${X(o.h13)}" cy="${Y(o.V)}" r="3.2" fill="#fff" stroke="#1f5fbf" stroke-width="1.6"/>`).join("");
+ const dx=X(D.h13),dy=Y(V.V);
+ return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;max-width:170mm" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Maximum speed versus significant wave height" font-family="Helvetica,Arial,sans-serif">
+ <rect x="0" y="0" width="${W}" height="${H}" fill="#fff"/><text x="${W/2}" y="20" text-anchor="middle" font-size="13" font-weight="bold" fill="#111">Maximum speed versus significant wave height</text>
+ ${g}<rect x="${L}" y="${T}" width="${pw}" height="${ph}" fill="none" stroke="#333" stroke-width="1"/>
+ <line x1="${L}" y1="${dy}" x2="${L+pw}" y2="${dy}" stroke="#98a2b3" stroke-width="1" stroke-dasharray="5 4"/><text x="${L+pw-4}" y="${dy-5}" text-anchor="end" font-size="10.5" fill="#667085">design speed ${_n(V.V,1)} kn</text>
+ <polyline points="${pts.join(" ")}" fill="none" stroke="#1f5fbf" stroke-width="2.4" stroke-linejoin="round"/>${dots}
+ <circle cx="${dx}" cy="${dy}" r="4.5" fill="#b42318"/><text x="${dx-8}" y="${dy-9}" text-anchor="end" font-size="10.5" fill="#b42318">design point: h1/3 = ${_n(D.h13,2)} m, ${_n(V.V,1)} kn</text>
+ <text x="${L+pw/2}" y="${H-10}" text-anchor="middle" font-size="12" fill="#111">Significant wave height h1/3, m (ft)</text>
+ <text transform="translate(16 ${T+ph/2}) rotate(-90)" text-anchor="middle" font-size="12" fill="#111">Maximum speed, knots</text></svg>`}
 function _e(s){return String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]))}
 function _n(x,d){if(x===undefined||x===null||x===""||isNaN(x))return"";const a=Math.abs(x);return (+x).toFixed(d??(a>=1000?0:a>=100?1:a>=10?2:3))}
 function _kv(rows){return `<table class="kv">`+rows.filter(r=>r[1]!==undefined&&r[1]!==""&&r[1]!==null).map(r=>`<tr><td>${_e(r[0])}</td><td>${_e(r[1])}</td></tr>`).join("")+`</table>`}
@@ -104,7 +120,7 @@ function buildReport(j,assets){
  h+=`</div>`;
  // ---- 4 operating limits
  h+=`<div class="sheet"><h2>4. Operating speed versus significant wave height</h2>`;
- if(OL.length){h+=`<p>The design vertical acceleration (3-2-2/1.1.3) is held at its design value of n<sub>cg</sub> = ${_n(D.ncg_used,2)} g, reached at V = ${V.V} kn and h<sub>1/3</sub> = ${D.h13} m. For higher significant wave heights the speed is reduced to keep the acceleration, and therefore the slamming pressure, constant (cf. 5-2-3/5). Speeds are limited to the design speed.</p><table><tr><th>Significant wave height h1/3 (m)</th><th>(ft)</th><th>Maximum speed (kn)</th><th>Speed-length ratio V/sqrt(L)</th></tr>${OL.map(o=>`<tr><td class="n">${_n(o.h13,2)}</td><td class="n">${_n(o.h13*_M_FT,1)}</td><td class="n">${_n(o.V,1)}</td><td class="n">${_n(o.V/Math.sqrt(V.L),2)}</td></tr>`).join("")}</table><p class="small">The table is derived from the acceleration equation only. Limits imposed by comfort, stability or the Administration are not included.</p>`}
+ if(OL.length){h+=`<p>The design vertical acceleration (3-2-2/1.1.3) is held at its design value of n<sub>cg</sub> = ${_n(D.ncg_used,2)} g, reached at V = ${V.V} kn and h<sub>1/3</sub> = ${D.h13} m. For higher significant wave heights the speed is reduced to keep the acceleration, and therefore the slamming pressure, constant (cf. 5-2-3/5). Speeds are limited to the design speed.</p><div class="fig">${opChart(OL,D,V)}<div class="small">Figure 4.1 - Maximum operating speed versus significant wave height. Circles mark the tabulated values; the curve holds n<sub>cg</sub> constant at the design value.</div></div><table><tr><th>Significant wave height h1/3 (m)</th><th>(ft)</th><th>Maximum speed (kn)</th><th>Speed-length ratio V/sqrt(L)</th></tr>${OL.map(o=>`<tr><td class="n">${_n(o.h13,2)}</td><td class="n">${_n(o.h13*_M_FT,1)}</td><td class="n">${_n(o.V,1)}</td><td class="n">${_n(o.V/Math.sqrt(V.L),2)}</td></tr>`).join("")}</table><p class="small">The table is derived from the acceleration equation only. Limits imposed by comfort, stability or the Administration are not included.</p>`}
  else h+=`<p>Not calculated: the vertical acceleration was supplied directly by the designer (model test or direct analysis), so a speed/wave-height relationship must be taken from that source.</p>`;
  h+=`</div>`;
  // ---- 5 methodology
